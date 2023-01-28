@@ -76,7 +76,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.repr {
             Repr::Libva(e) => match e.to_str() {
-                Ok(s) => s.fmt(f),
+                Ok(s) => write!(f, "{self:?}: {s}"),
                 Err(_) => fmt::Debug::fmt(e, f),
             },
             Repr::Libloading(e) => e.fmt(f),

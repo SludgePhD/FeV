@@ -1,20 +1,30 @@
+use std::{cmp, time::Instant};
+
 use anyhow::{anyhow, bail};
+use byteorder::{ReadBytesExt, BE};
 use jfifdump::SegmentKind;
 use raw_window_handle::HasRawDisplayHandle;
 use softbuffer::GraphicsContext;
 use v_ayylmao::{
-    jpeg, BufferType, Display, Entrypoint, Profile, SliceParameterBufferBase, SurfaceWithImage,
+    jpeg, BufferType, Display, Entrypoint, PixelFormat, Profile, RTFormat,
+    SliceParameterBufferBase, SurfaceWithImage,
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{Event, WindowEvent},
+    event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::Window,
+    window::WindowBuilder,
 };
+
+const USE_RGBA_VAIMAGE: bool = true;
 
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
-        .filter_module(env!("CARGO_PKG_NAME"), log::LevelFilter::Trace)
+        .filter_module(
+            &env!("CARGO_PKG_NAME").replace('-', "_"),
+            log::LevelFilter::Trace,
+        )
+        .filter_module(env!("CARGO_CRATE_NAME"), log::LevelFilter::Trace)
         .init();
 
     let jpeg = match std::env::args_os().skip(1).next() {
@@ -23,7 +33,9 @@ fn main() -> anyhow::Result<()> {
     };
     let mut read = &*jpeg;
     let mut dec = jpeg_decoder::Decoder::new(&mut read);
+    let start = Instant::now();
     let control_data = dec.decode()?;
+    log::info!("jpeg-decoder took {:?}", start.elapsed());
     let control_data = control_data
         .chunks(3)
         .map(|pix| {
@@ -32,11 +44,13 @@ fn main() -> anyhow::Result<()> {
         })
         .collect::<Vec<_>>();
     let info = dec.info().unwrap();
+    log::info!("image size: {}x{}", info.width, info.height);
 
     let ev = EventLoop::new();
-    let win = Window::new(&ev)?;
-    win.set_inner_size(PhysicalSize::new(info.width, info.height));
-    win.set_resizable(false);
+    let win = WindowBuilder::new()
+        .with_inner_size(PhysicalSize::new(info.width, info.height))
+        .with_resizable(false)
+        .build(&ev)?;
     let handle = win.raw_display_handle();
 
     let mut graphics_context = unsafe { GraphicsContext::new(win) }.unwrap();
@@ -45,14 +59,29 @@ fn main() -> anyhow::Result<()> {
     let config = display.create_default_config(Profile::JPEGBaseline, Entrypoint::VLD)?;
     let mut context = config.create_default_context(info.width.into(), info.height.into())?;
 
-    let mut surface =
-        SurfaceWithImage::new_default_format(&display, info.width.into(), info.height.into())?;
+    let mut surface = if USE_RGBA_VAIMAGE {
+        SurfaceWithImage::with_format(
+            &display,
+            info.width.into(),
+            info.height.into(),
+            RTFormat::default(),
+            PixelFormat::RGBA,
+        )?
+    } else {
+        SurfaceWithImage::with_default_format(&display, info.width.into(), info.height.into())?
+    };
+    log::debug!("Image = {:?}", surface.image());
 
+    let eoi;
+    let mut max_h_factor = 0;
+    let mut max_v_factor = 0;
     let mut ppbuf = None;
-    let mut slice_params = None;
-    let mut slice_data = None;
+    let mut scan = None;
     let mut iqbuf = jpeg::IQMatrixBuffer::new();
-    let mut tbls = [jpeg::HuffmanTable::new(), jpeg::HuffmanTable::new()];
+    let mut tbls = [
+        jpeg::HuffmanTable::default_luminance(),
+        jpeg::HuffmanTable::default_chrominance(),
+    ];
     let mut restart_interval = 0;
 
     let mut read = &*jpeg;
@@ -84,6 +113,13 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             SegmentKind::Frame(frame) => {
+                if frame.sof != 0xC0 {
+                    bail!(
+                        "not a baseline JPEG (SOF={:02x}, {})",
+                        frame.sof,
+                        frame.get_sof_name()
+                    );
+                }
                 let mut buf = jpeg::PictureParameterBuffer::new(
                     frame.dimension_x,
                     frame.dimension_y,
@@ -96,20 +132,25 @@ fn main() -> anyhow::Result<()> {
                         component.vertical_sampling_factor,
                         component.quantization_table,
                     );
+                    max_h_factor = cmp::max(
+                        u32::from(component.horizontal_sampling_factor),
+                        max_h_factor,
+                    );
+                    max_v_factor =
+                        cmp::max(u32::from(component.vertical_sampling_factor), max_v_factor);
                 }
                 ppbuf = Some(buf);
             }
-            SegmentKind::Scan(scan) => {
-                slice_params = Some(jpeg::SliceParameterBuffer::new(
-                    SliceParameterBufferBase::new(scan.data.len().try_into().unwrap()),
-                    restart_interval,
-                    1,
-                ));
-                slice_data = Some(scan.data);
+            SegmentKind::Scan(s) => {
+                // `segment.position` is *after* the segment's marker for some reason
+                scan = Some((segment.position - 2, s));
             }
-            SegmentKind::Eoi => break,
+            SegmentKind::Eoi => {
+                eoi = segment.position;
+                break;
+            }
             SegmentKind::Unknown { marker, .. } => {
-                eprintln!("unknown segment marker: {:#04x}", marker);
+                log::warn!("unknown segment marker: {:#04x}", marker);
             }
             SegmentKind::Dac(_)
             | SegmentKind::Rst(_)
@@ -120,10 +161,31 @@ fn main() -> anyhow::Result<()> {
     }
 
     let Some(ppbuf) = ppbuf else { bail!("file is missing SOI segment") };
-    let Some(slice_data) = slice_data else { bail!("missing SOS segment") };
-    let Some(slice_params) = slice_params else { bail!("missing SOS segment") };
+    let Some((sos_pos, scan)) = scan else { bail!("missing SOS segment") };
 
-    let mut dhtbuf = jpeg::HuffmanTableBuffer::new();
+    // NB: the slice data starts at the *data* contained in the SOS segment, and continues until
+    // the byte just before the EOI segment.
+
+    let mut sos = &jpeg[sos_pos..];
+    assert_eq!(sos.read_u16::<BE>()?, 0xFFDA);
+    let sos_len = usize::from(sos.read_u16::<BE>()?);
+    // `Ls` field counts its own bytes, but not the preceding marker.
+    let slice_data = &jpeg[sos_pos + sos_len + 2..eoi];
+
+    let width = u32::from(ppbuf.picture_width());
+    let height = u32::from(ppbuf.picture_height());
+    let num_mcus = ((width + max_h_factor * 8 - 1) / (max_h_factor * 8))
+        * ((height + max_v_factor * 8 - 1) / (max_v_factor * 8));
+    let mut slice_params = jpeg::SliceParameterBuffer::new(
+        SliceParameterBufferBase::new(slice_data.len().try_into().unwrap()),
+        restart_interval,
+        num_mcus,
+    );
+    for component in &scan.components {
+        slice_params.push_component(component.id, component.dc_table, component.ac_table);
+    }
+
+    let mut dhtbuf = jpeg::HuffmanTableBuffer::zeroed();
     for (index, table) in tbls.iter().enumerate() {
         dhtbuf.set_huffman_table(index as _, table);
     }
@@ -135,19 +197,39 @@ fn main() -> anyhow::Result<()> {
         context.create_param_buffer(BufferType::SliceParameter, slice_params)?;
     let mut buf_slice_data = context.create_data_buffer(BufferType::SliceData, &slice_data)?;
 
-    let mut picture = context.begin_picture(surface.surface_mut())?;
+    let mut picture = context.begin_picture(&mut surface)?;
     picture.render_picture(&mut buf_dht)?;
     picture.render_picture(&mut buf_iq)?;
     picture.render_picture(&mut buf_pp)?;
     picture.render_picture(&mut buf_slice_param)?;
     picture.render_picture(&mut buf_slice_data)?;
     unsafe { picture.end_picture()? }
-    drop(picture);
-    println!("submitted render command");
 
-    let status = surface.surface_mut().status()?;
-    eprintln!("{status:?}");
+    let status = surface.status()?;
+    log::trace!("surface status = {status:?}");
 
+    let mapping = surface.map_sync()?;
+    let decoded_data: Vec<_> = if USE_RGBA_VAIMAGE {
+        mapping
+            .chunks(4)
+            .take(width as usize * height as usize) // ignore trailing padding bytes
+            .map(|pix| {
+                let [r, g, b] = [pix[0], pix[1], pix[2]].map(u32::from);
+                r << 16 | g << 8 | b
+            })
+            .collect()
+    } else {
+        mapping
+            .iter()
+            .take(width as usize * height as usize) // only take Y plane
+            .map(|y| {
+                let y = u32::from(*y);
+                y << 16 | y << 8 | y
+            })
+            .collect()
+    };
+
+    let mut show_control_data = false;
     ev.run(move |event, _tgt, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -157,13 +239,42 @@ fn main() -> anyhow::Result<()> {
                     let size = graphics_context.window().inner_size();
                     (size.width, size.height)
                 };
-                graphics_context.set_buffer(&control_data, width as u16, height as u16);
+                let data = if show_control_data {
+                    &control_data
+                } else {
+                    &decoded_data
+                };
+                graphics_context.set_buffer(data, width as u16, height as u16);
+                graphics_context
+                    .window_mut()
+                    .set_title(&format!("control={}", show_control_data));
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
                 *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: Some(VirtualKeyCode::Space),
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    }
+                    | WindowEvent::MouseInput {
+                        state: ElementState::Pressed,
+                        button: MouseButton::Left,
+                        ..
+                    },
+                ..
+            } => {
+                show_control_data = !show_control_data;
+                graphics_context.window().request_redraw();
             }
             _ => {}
         }

@@ -30,7 +30,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("  - Entrypoint {:?}", entrypoint);
 
             let config = display.create_default_config(profile, entrypoint)?;
-            let attribs = config.query_surface_attributes()?;
+            let attribs = match config.query_surface_attributes() {
+                Ok(attribs) => attribs,
+                Err(e) => {
+                    println!("    Could not query surface attributes: {e}");
+                    continue;
+                },
+            };
             println!("    {} surface attributes", attribs.len());
             for attrib in attribs {
                 print!("    - {:?} ", attrib.ty());

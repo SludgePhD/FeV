@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     ffi::{c_void, CStr},
     marker::PhantomData,
@@ -7,6 +8,7 @@ use std::{
     panic::catch_unwind,
     ptr,
     sync::Arc,
+    time::Instant,
     vec,
 };
 
@@ -45,6 +47,14 @@ pub enum DisplayApi {
 struct DisplayOwner {
     raw: VADisplay,
     libva: &'static libva,
+}
+
+impl fmt::Debug for DisplayOwner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DisplayOwner")
+            .field("raw", &self.raw)
+            .finish()
+    }
 }
 
 impl Drop for DisplayOwner {
@@ -89,7 +99,7 @@ impl Display {
                     return Err(Error::from(format!(
                         "unsupported display handle type: {:?}",
                         handle
-                    )))
+                    )));
                 }
             };
 
@@ -291,8 +301,9 @@ impl Display {
 /// Bundles together a [`Surface`] and an [`Image`] with a matching format, and allows transferring
 /// data between them.
 ///
-/// If the driver supports `vaDeriveImage`, this type will automatically avoid copying between the
+/// If the driver supports `vaDeriveImage`, this type can automatically avoid copying between the
 /// two.
+#[derive(Debug)]
 pub struct SurfaceWithImage {
     surface: Surface,
     image: Image,
@@ -300,31 +311,56 @@ pub struct SurfaceWithImage {
 }
 
 impl SurfaceWithImage {
-    /// Creates a surface and image with the default `NV12` pixel/surface format.
-    pub fn new_default_format(display: &Display, width: u32, height: u32) -> Result<Self> {
+    /// Creates a surface and image of the given resolution and pixel formats.
+    pub fn with_default_format(display: &Display, width: u32, height: u32) -> Result<Self> {
         let mut surface = display.create_surface(RTFormat::default(), width, height, &mut [])?;
 
         // Try to use `vaDeriveImage` first, fall back if that fails.
         match surface.derive_image() {
             Ok(image) => {
-                return Ok(Self {
+                log::trace!("using vaDeriveImage for fast surface access");
+
+                Ok(Self {
                     surface,
                     image,
                     derived: true,
                 })
             }
-            Err(e) if e.as_libva() == Some(VAError::ERROR_OPERATION_FAILED) => {}
-            Err(e) => return Err(e),
+            Err(e) if e.as_libva() == Some(VAError::ERROR_OPERATION_FAILED) => {
+                log::trace!("vaDeriveImage not supported, using vaGetImage");
+
+                let image = display.create_image(ImageFormat::default(), width, height)?;
+                Ok(Self {
+                    surface,
+                    image,
+                    derived: false,
+                })
+            }
+            Err(e) => Err(e),
         }
+    }
 
-        // `vaDeriveImage` is not supported, create an `Image` manually.
-        let image = display.create_image(ImageFormat::default(), width, height)?;
+    pub fn with_format(
+        display: &Display,
+        width: u32,
+        height: u32,
+        surface_format: RTFormat,
+        image_format: PixelFormat,
+    ) -> Result<Self> {
+        // `vaDeriveImage` gives us an arbitrary image format, so we don't use that here.
+        let surface = display.create_surface(surface_format, width, height, &mut [])?;
 
+        let image = display.create_image(ImageFormat::new(image_format), width, height)?;
         Ok(Self {
             surface,
             image,
             derived: false,
         })
+    }
+
+    #[inline]
+    pub fn image(&self) -> &Image {
+        &self.image
     }
 
     pub fn map_sync(&mut self) -> Result<Mapping<'_, u8>> {
@@ -334,13 +370,25 @@ impl SurfaceWithImage {
 
         self.image.map()
     }
+}
+
+impl Deref for SurfaceWithImage {
+    type Target = Surface;
 
     #[inline]
-    pub fn surface_mut(&mut self) -> &mut Surface {
+    fn deref(&self) -> &Self::Target {
+        &self.surface
+    }
+}
+
+impl DerefMut for SurfaceWithImage {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.surface
     }
 }
 
+#[derive(Debug)]
 pub struct Surface {
     d: Arc<DisplayOwner>,
     id: VASurfaceID,
@@ -349,7 +397,12 @@ pub struct Surface {
 impl Surface {
     /// Blocks until all pending operations writing to or reading from the surface have finished.
     pub fn sync(&mut self) -> Result<()> {
-        unsafe { check(self.d.libva.vaSyncSurface(self.d.raw, self.id)) }
+        let start = Instant::now();
+
+        unsafe { check(self.d.libva.vaSyncSurface(self.d.raw, self.id))? }
+
+        log::trace!("vaSyncSurface took {:?}", start.elapsed());
+        Ok(())
     }
 
     pub fn status(&self) -> Result<SurfaceStatus> {
@@ -368,6 +421,8 @@ impl Surface {
     pub fn copy_to_image(&mut self, image: &mut Image) -> Result<()> {
         self.sync()?;
 
+        let start = Instant::now();
+
         unsafe {
             check(self.d.libva.vaGetImage(
                 self.d.raw,
@@ -379,6 +434,8 @@ impl Surface {
                 image.raw.image_id,
             ))?;
         }
+
+        log::trace!("vaGetImage took {:?}", start.elapsed());
 
         Ok(())
     }
@@ -414,18 +471,29 @@ impl Drop for Surface {
     }
 }
 
+#[derive(Debug)]
 pub struct Image {
     d: Arc<DisplayOwner>,
     raw: VAImage,
 }
 
 impl Image {
+    #[inline]
+    pub fn pixelformat(&self) -> PixelFormat {
+        self.raw.format.fourcc
+    }
+
     /// Maps the [`Buffer`] storing the backing data of this [`Image`].
     pub fn map(&mut self) -> Result<Mapping<'_, u8>> {
+        let start = Instant::now();
+
         let mut ptr = ptr::null_mut();
         unsafe {
             check(self.d.libva.vaMapBuffer(self.d.raw, self.raw.buf, &mut ptr))?;
         }
+
+        log::trace!("vaMapBuffer for VAImage took {:?}", start.elapsed());
+
         Ok(Mapping {
             d: &self.d,
             id: self.raw.buf,
@@ -544,6 +612,7 @@ impl Context {
         })
     }
 
+    /// Creates a [`Buffer`] of the specified [`BufferType`], containing raw data bytes.
     pub fn create_data_buffer(&self, buf_ty: BufferType, data: &[u8]) -> Result<Buffer<u8>> {
         let mut buf_id = 0;
         unsafe {
@@ -551,8 +620,8 @@ impl Context {
                 self.d.raw,
                 self.id,
                 buf_ty,
-                mem::size_of::<u8>() as c_uint,
                 c_uint::try_from(data.len()).unwrap(),
+                1,
                 data.as_ptr() as *mut _,
                 &mut buf_id,
             ))?;
@@ -565,6 +634,9 @@ impl Context {
         })
     }
 
+    /// Creates a [`Buffer`] of the specified [`BufferType`], containing an instance of `T`.
+    ///
+    /// This is primarily used to pass individual parameter structures to libva.
     pub fn create_param_buffer<T: Copy>(
         &self,
         buf_ty: BufferType,
@@ -622,6 +694,10 @@ pub struct InProgressPicture<'a> {
 }
 
 impl<'a> InProgressPicture<'a> {
+    /// Submits a [`Buffer`] as part of this libva operation.
+    ///
+    /// Typically, libva does not document which buffer types are required for any given entry
+    /// point, so good luck!
     pub fn render_picture<T>(&mut self, buffer: &mut Buffer<T>) -> Result<()> {
         unsafe {
             check(
@@ -632,7 +708,16 @@ impl<'a> InProgressPicture<'a> {
         }
     }
 
-    pub unsafe fn end_picture(&mut self) -> Result<()> {
+    /// Finishes submitting buffers, and begins the libva operation (encode, decode, etc.).
+    ///
+    /// # Safety
+    ///
+    /// libva does not specify when Undefined Behavior occurs, and in practice at least some
+    /// implementations exhibit UB-like behavior when buffers where submitted incorrectly (or when
+    /// not all buffers required by the operation were submitted).
+    ///
+    /// So, basically, the safety invariant of this method is "fuck if I know". Good luck, Loser.
+    pub unsafe fn end_picture(self) -> Result<()> {
         check(self.d.libva.vaEndPicture(self.d.raw, self.context.id))
     }
 }
@@ -686,7 +771,7 @@ impl<T: 'static> Drop for Buffer<T> {
 /// A [`Mapping`] can be accessed in 3 ways:
 ///
 /// - [`Deref`] allows read access and is implemented if `T` implements [`AnyBitPattern`].
-/// - [`DerefMut`] allows read and write access is implemented if `T` implements [`Pod`].
+/// - [`DerefMut`] allows read and write access and is implemented if `T` implements [`Pod`].
 /// - [`Mapping::write`] is implemented if `T` implements [`Copy`], but only allows storing a value
 ///   in the buffer.
 pub struct Mapping<'a, T> {

@@ -1,4 +1,5 @@
 #![allow(non_upper_case_globals)]
+#![allow(dead_code)]
 
 pub mod jpeg;
 
@@ -90,6 +91,7 @@ pub struct VASurfaceDecodeMBErrors {
     va_reserved: [u32; VA_PADDING_LOW - 1],
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct VAImage {
     pub image_id: VAImageID,

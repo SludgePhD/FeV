@@ -126,7 +126,7 @@ ffi_enum! {
         HEVCSccMain444 = 31,
         AV1Profile0 = 32,
         AV1Profile1 = 33,
-        HEVCSccMain444_10 = 24,
+        HEVCSccMain444_10 = 34,
         Protected = 35,
     }
 }
@@ -476,10 +476,10 @@ impl SliceParameterBufferBase {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct ImageFormat {
-    pub(crate) fourcc: u32,
+    pub(crate) fourcc: PixelFormat,
     pub(crate) byte_order: ByteOrder,
     pub(crate) bits_per_pixel: u32,
     pub(crate) depth: u32,
@@ -493,19 +493,19 @@ pub struct ImageFormat {
 impl ImageFormat {
     pub fn new(pixel_format: PixelFormat) -> Self {
         Self {
-            fourcc: pixel_format.to_u32_le(),
+            fourcc: pixel_format,
             ..unsafe { mem::zeroed() }
         }
     }
 
     #[inline]
     pub fn pixel_format(&self) -> PixelFormat {
-        PixelFormat::from_u32_le(self.fourcc)
+        self.fourcc
     }
 
     #[inline]
     pub fn set_pixel_format(&mut self, fmt: PixelFormat) {
-        self.fourcc = fmt.to_u32_le();
+        self.fourcc = fmt;
     }
 
     #[inline]

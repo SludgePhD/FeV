@@ -5,8 +5,8 @@ use std::{
     os::raw::{c_char, c_float, c_int, c_uchar, c_uint},
 };
 
-use crate::raw::*;
-use crate::shared::*;
+use crate::raw::{vpp::VAProcPipelineCaps, *};
+use crate::shared::{vpp::*, *};
 
 use once_cell::sync::OnceCell;
 
@@ -131,6 +131,10 @@ dylib! {
     fn vaQueryDisplayAttributes(dpy: VADisplay, attr_list: *mut VADisplayAttribute, num_attributes: *mut c_int) -> VAStatus;
     fn vaGetDisplayAttributes(dpy: VADisplay, attr_list: *mut VADisplayAttribute, num_attributes: c_int) -> VAStatus;
     fn vaSetDisplayAttributes(dpy: VADisplay, attr_list: *mut VADisplayAttribute, num_attributes: c_int) -> VAStatus;
+
+    fn vaQueryVideoProcFilters(dpy: VADisplay, context: VAContextID, filters: *mut FilterType, num_filters: *mut c_uint) -> VAStatus;
+    fn vaQueryVideoProcFilterCaps(dpy: VADisplay, context: VAContextID, type_: FilterType, filter_caps: *mut c_void, num_filter_caps: *mut c_uint) -> VAStatus;
+    fn vaQueryVideoProcPipelineCaps(dpy: VADisplay, context: VAContextID, filters: *mut VABufferID, num_filters: c_uint, pipeline_caps: *mut VAProcPipelineCaps) -> VAStatus;
 }
 
 dylib! {

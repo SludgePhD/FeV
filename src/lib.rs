@@ -23,6 +23,7 @@ mod error;
 pub mod jpeg;
 mod raw;
 mod shared;
+pub mod vpp;
 
 pub use error::Error;
 pub use pixelformat::PixelFormat;
@@ -828,6 +829,10 @@ impl Profiles {
     pub fn is_empty(&self) -> bool {
         self.vec.is_empty()
     }
+
+    pub fn contains(&self, profile: Profile) -> bool {
+        self.vec.contains(&profile)
+    }
 }
 
 impl IntoIterator for Profiles {
@@ -842,6 +847,12 @@ impl IntoIterator for Profiles {
 #[derive(Clone)]
 pub struct Entrypoints {
     vec: Vec<Entrypoint>,
+}
+
+impl Entrypoints {
+    pub fn contains(&self, entrypoint: Entrypoint) -> bool {
+        self.vec.contains(&entrypoint)
+    }
 }
 
 impl IntoIterator for Entrypoints {
@@ -904,9 +915,19 @@ pub struct ImageFormats {
     vec: Vec<ImageFormat>,
 }
 
+impl ImageFormats {
+    pub fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.vec.is_empty()
+    }
+}
+
 impl IntoIterator for ImageFormats {
     type Item = ImageFormat;
-    type IntoIter = vec::IntoIter<ImageFormat>;
+    type IntoIter = vec::IntoIter<ImageFormat>; // TODO wrap C type
 
     fn into_iter(self) -> Self::IntoIter {
         self.vec.into_iter()

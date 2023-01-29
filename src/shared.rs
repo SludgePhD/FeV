@@ -3,6 +3,7 @@
 #![allow(non_upper_case_globals)]
 
 pub mod jpeg;
+pub mod vpp;
 
 use std::{
     ffi::CStr,
@@ -344,6 +345,14 @@ ffi_enum! {
         R90  = 0x00000001,
         R180 = 0x00000002,
         R270 = 0x00000003,
+    }
+}
+
+bitflags! {
+    pub struct Mirror: u32 {
+        const NONE = 0;
+        const HORIZONTAL = 0x00000001;
+        const VERTICAL   = 0x00000002;
     }
 }
 

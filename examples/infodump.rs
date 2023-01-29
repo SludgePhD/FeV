@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use raw_window_handle::HasRawDisplayHandle;
-use v_ayylmao::Display;
+use v_ayylmao::{Display, Entrypoint, Profile};
 use winit::{event_loop::EventLoop, window::Window};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Err(e) => {
                     println!("    Could not query surface attributes: {e}");
                     continue;
-                },
+                }
             };
             println!("    {} surface attributes", attribs.len());
             for attrib in attribs {
@@ -57,8 +57,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    println!("Supported image formats:");
-    for format in display.query_image_formats()? {
+    let formats = display.query_image_formats()?;
+    println!("{} supported image formats", formats.len());
+    for format in formats {
         println!(
             "- {} {:?}, {} bpp, depth={}, Rm={:#010x}, Gm={:#010x}, Bm={:#010x}, Am={:#010x}",
             format.pixel_format(),
@@ -83,6 +84,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             attrib.max_value(),
             attrib.value(),
         );
+    }
+
+    if display.query_profiles()?.contains(Profile::None)
+        && display
+            .query_entrypoints(Profile::None)?
+            .contains(Entrypoint::VideoProc)
+    {
+        let config = display.create_default_config(Profile::None, Entrypoint::VideoProc)?;
+        let context = config.create_default_context(512, 512)?;
+        let proc_filters = context.query_video_processing_filters()?;
+        println!("{} supported video processing filters", proc_filters.len());
+        for filter in proc_filters {
+            println!("- {:?}", filter);
+        }
     }
 
     Ok(())

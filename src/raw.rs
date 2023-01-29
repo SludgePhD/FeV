@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod jpeg;
+pub mod vpp;
 
 use std::{
     ffi::c_void,
@@ -15,6 +16,15 @@ pub const VA_PADDING_MEDIUM: usize = 8;
 pub const VA_PADDING_HIGH: usize = 16;
 pub const VA_PADDING_LARGE: usize = 32;
 pub const VA_TIMEOUT_INFINITE: u64 = 0xFFFFFFFFFFFFFFFF;
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct VARectangle {
+    pub x: i16,
+    pub y: i16,
+    pub width: u16,
+    pub height: u16,
+}
 
 #[derive(Clone, Copy)]
 #[repr(C)]

@@ -19,18 +19,21 @@ impl PixelFormat {
     /// Planar YUV 4:2:0 pixel format, with U and V swapped compared to `NV12`.
     pub const NV21: Self = f(b"NV21");
 
-    /// Packed 8-bit RGBA.
+    /// `RGBA`: Packed 8-bit RGBA, stored in memory as `aaaaaaaa bbbbbbbb gggggggg rrrrrrrr`.
     pub const RGBA: Self = f(b"RGBA");
+
+    /// `ARGB`: Packed 8-bit RGBA, stored in memory as `bbbbbbbb gggggggg rrrrrrrr aaaaaaaa`.
+    pub const ARGB: Self = f(b"ARGB");
 
     /// Packed 8-bit RGBX.
     ///
     /// The X channel has unspecified values.
     pub const RGBX: Self = f(b"RGBX");
 
-    /// Packed 8-bit RGBA, stored in BGRA order.
+    /// Packed 8-bit BGRA.
     pub const BGRA: Self = f(b"BGRA");
 
-    /// Packed 8-bit RGBX, stored in BGRX order.
+    /// Packed 8-bit BGRX.
     ///
     /// The X channel has unspecified values.
     pub const BGRX: Self = f(b"BGRX");

@@ -1,3 +1,5 @@
+use std::mem;
+
 ffi_enum! {
     pub enum FilterType: u32 {
         None = 0,
@@ -38,7 +40,9 @@ ffi_enum! {
 
 ffi_enum! {
     pub enum ColorStandardType: u32 {
+        /// Unknown/Arbitrary.
         None = 0,
+        /// The color standard used by JPEG/JFIF images.
         BT601 = 1,
         BT709 = 2,
         BT470M = 3,
@@ -100,7 +104,25 @@ bitflags! {
 
 bitflags! {
     pub struct FilterFlags: u32 {
-        const MANDATORY = 0x00000001;
+        const MANDATORY     = 0x00000001;
+
+        const FRAME_PICTURE = 0x00000000;
+        const TOP_FIELD     = 0x00000001;
+        const BOTTOM_FIELD  = 0x00000002;
+
+        const SRC_BT601     = 0x00000010;
+        const SRC_BT709     = 0x00000020;
+        const SRC_SMPTE_240 = 0x00000040;
+
+        const FILTER_SCALING_DEFAULT       = 0x00000000;
+        const FILTER_SCALING_FAST          = 0x00000100;
+        const FILTER_SCALING_HQ            = 0x00000200;
+        const FILTER_SCALING_NL_ANAMORPHIC = 0x00000300;
+
+        const FILTER_INTERPOLATION_DEFAULT          = 0x00000000;
+        const FILTER_INTERPOLATION_NEAREST_NEIGHBOR = 0x00001000;
+        const FILTER_INTERPOLATION_BILINEAR         = 0x00002000;
+        const FILTER_INTERPOLATION_ADVANCED         = 0x00003000;
     }
 }
 
@@ -117,8 +139,15 @@ ffi_enum! {
 
 ffi_enum! {
     pub enum SourceRange: u8 {
+        /// Unknown, Arbitrary color range.
         UNKNOWN = 0,
+        /// Color components use a limited range.
+        ///
+        /// Y is in range 16-235, Cb/Cr are in range 16-240.
         REDUCED = 1,
+        /// Color components use the full 0-255 range.
+        ///
+        /// This is used, among other things, in JPEG images.
         FULL = 2,
     }
 }
@@ -129,5 +158,54 @@ bitflags! {
         const HDR_TO_SDR = 0x0002;
         const HDR_TO_EDR = 0x0004;
         const SDR_TO_HDR = 0x0008;
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct ColorProperties {
+    chroma_sample_location: ChromaSiting,
+    color_range: SourceRange,
+    colour_primaries: u8,
+    transfer_characteristics: u8,
+    matrix_coefficients: u8,
+    reserved: [u8; 3],
+}
+
+impl ColorProperties {
+    pub fn new() -> Self {
+        unsafe { mem::zeroed() }
+    }
+
+    #[inline]
+    pub fn chroma_sample_location(&self) -> ChromaSiting {
+        self.chroma_sample_location
+    }
+
+    #[inline]
+    pub fn set_chroma_sample_location(&mut self, chroma_sample_location: ChromaSiting) {
+        self.chroma_sample_location = chroma_sample_location;
+    }
+
+    #[inline]
+    pub fn color_range(&self) -> SourceRange {
+        self.color_range
+    }
+
+    #[inline]
+    pub fn set_color_range(&mut self, color_range: SourceRange) {
+        self.color_range = color_range;
+    }
+
+    #[inline]
+    pub fn with_chroma_sample_location(mut self, chroma_sample_location: ChromaSiting) -> Self {
+        self.chroma_sample_location = chroma_sample_location;
+        self
+    }
+
+    #[inline]
+    pub fn with_color_range(mut self, color_range: SourceRange) -> Self {
+        self.color_range = color_range;
+        self
     }
 }

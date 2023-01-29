@@ -21,6 +21,7 @@ mod macros;
 mod dlopen;
 mod error;
 pub mod jpeg;
+mod pixelformat;
 mod raw;
 mod shared;
 pub mod vpp;
@@ -312,9 +313,25 @@ pub struct SurfaceWithImage {
 }
 
 impl SurfaceWithImage {
-    /// Creates a surface and image of the given resolution and pixel formats.
+    /// Creates a surface and image of the given resolution, using default pixel formats.
     pub fn with_default_format(display: &Display, width: u32, height: u32) -> Result<Self> {
-        let mut surface = display.create_surface(RTFormat::default(), width, height, &mut [])?;
+        Self::with_surface_format(display, width, height, RTFormat::default())
+    }
+
+    /// Creates a surface and image of the given resolution and surface format.
+    ///
+    /// The [`Image`]s format will be picked by the driver to be compatible with the given surface
+    /// format.
+    ///
+    /// If supported by the driver, `vaDeriveImage` will be used instead of copying from surface to
+    /// image.
+    pub fn with_surface_format(
+        display: &Display,
+        width: u32,
+        height: u32,
+        surface_format: RTFormat,
+    ) -> Result<Self> {
+        let mut surface = display.create_surface(surface_format, width, height, &mut [])?;
 
         // Try to use `vaDeriveImage` first, fall back if that fails.
         match surface.derive_image() {
@@ -341,7 +358,7 @@ impl SurfaceWithImage {
         }
     }
 
-    pub fn with_format(
+    pub fn with_formats(
         display: &Display,
         width: u32,
         height: u32,
@@ -365,7 +382,10 @@ impl SurfaceWithImage {
     }
 
     pub fn map_sync(&mut self) -> Result<Mapping<'_, u8>> {
-        if !self.derived {
+        if self.derived {
+            self.surface.sync()?;
+        } else {
+            // (syncs internally)
             self.surface.copy_to_image(&mut self.image)?;
         }
 
@@ -419,6 +439,10 @@ impl Surface {
     }
 
     /// Copies all pixels from `self` to the given [`Image`].
+    ///
+    /// This calls `vaGetImage`, which may be expensive on some drivers (eg.
+    /// Intel). If possible, [`SurfaceWithImage`] should be used, so that
+    /// `vaDeriveImage` is used instead if the driver supports it.
     pub fn copy_to_image(&mut self, image: &mut Image) -> Result<()> {
         self.sync()?;
 
@@ -441,7 +465,7 @@ impl Surface {
         Ok(())
     }
 
-    /// Creates an [`Image`] that allow direct access to the surface's image data.
+    /// Creates an [`Image`] that allows direct access to the surface's image data.
     ///
     /// Only supported by some drivers. Will return [`VAError::ERROR_OPERATION_FAILED`] if it's not
     /// supported.
@@ -479,6 +503,11 @@ pub struct Image {
 }
 
 impl Image {
+    #[inline]
+    pub fn image_format(&self) -> &ImageFormat {
+        &self.raw.format
+    }
+
     #[inline]
     pub fn pixelformat(&self) -> PixelFormat {
         self.raw.format.fourcc
@@ -606,9 +635,12 @@ impl Context {
             ))?;
         }
         Ok(Buffer {
-            d: self.d.clone(),
-            id: buf_id,
-            capacity: num_elements,
+            raw: RawBuffer {
+                d: self.d.clone(),
+                id: buf_id,
+                elem_size: mem::size_of::<T>(),
+                capacity: num_elements,
+            },
             _p: PhantomData,
         })
     }
@@ -628,9 +660,12 @@ impl Context {
             ))?;
         }
         Ok(Buffer {
-            d: self.d.clone(),
-            id: buf_id,
-            capacity: data.len(),
+            raw: RawBuffer {
+                d: self.d.clone(),
+                id: buf_id,
+                elem_size: 1,
+                capacity: data.len(),
+            },
             _p: PhantomData,
         })
     }
@@ -656,9 +691,12 @@ impl Context {
             ))?;
         }
         Ok(Buffer {
-            d: self.d.clone(),
-            id: buf_id,
-            capacity: 1,
+            raw: RawBuffer {
+                d: self.d.clone(),
+                id: buf_id,
+                elem_size: mem::size_of::<T>(),
+                capacity: 1,
+            },
             _p: PhantomData,
         })
     }
@@ -704,7 +742,7 @@ impl<'a> InProgressPicture<'a> {
             check(
                 self.d
                     .libva
-                    .vaRenderPicture(self.d.raw, self.context.id, &mut buffer.id, 1),
+                    .vaRenderPicture(self.d.raw, self.context.id, &mut buffer.raw.id, 1),
             )
         }
     }
@@ -715,7 +753,8 @@ impl<'a> InProgressPicture<'a> {
     ///
     /// libva does not specify when Undefined Behavior occurs, and in practice at least some
     /// implementations exhibit UB-like behavior when buffers where submitted incorrectly (or when
-    /// not all buffers required by the operation were submitted).
+    /// not all buffers required by the operation were submitted). It also does not document which
+    /// buffer types must be submitted (or must not be submitted) for any given entry point.
     ///
     /// So, basically, the safety invariant of this method is "fuck if I know". Good luck, Loser.
     pub unsafe fn end_picture(self) -> Result<()> {
@@ -723,46 +762,65 @@ impl<'a> InProgressPicture<'a> {
     }
 }
 
-/// A buffer that holds elements of type `T`.
-pub struct Buffer<T: 'static> {
+/// A buffer that holds arbitrary data.
+pub struct RawBuffer {
     d: Arc<DisplayOwner>,
     id: VABufferID,
+    #[allow(dead_code)]
+    elem_size: usize,
     capacity: usize,
-    _p: PhantomData<T>,
 }
 
-impl<T: 'static> Buffer<T> {
-    pub fn map(&mut self) -> Result<Mapping<'_, T>> {
-        let mut ptr = ptr::null_mut();
-        unsafe {
-            check(self.d.libva.vaMapBuffer(self.d.raw, self.id, &mut ptr))?;
-        }
-        Ok(Mapping {
-            d: &self.d,
-            id: self.id,
-            ptr: ptr.cast(),
-            capacity: self.capacity,
-        })
-    }
-
-    pub fn sync(&mut self) -> Result<()> {
-        unsafe {
-            check(
-                self.d
-                    .libva
-                    .vaSyncBuffer(self.d.raw, self.id, VA_TIMEOUT_INFINITE),
-            )
-        }
-    }
-}
-
-impl<T: 'static> Drop for Buffer<T> {
+impl Drop for RawBuffer {
     fn drop(&mut self) {
         unsafe {
             check_log(
                 self.d.libva.vaDestroyBuffer(self.d.raw, self.id),
                 "vaDestroyBuffer call in drop",
             );
+        }
+    }
+}
+
+impl<T> From<Buffer<T>> for RawBuffer {
+    fn from(buf: Buffer<T>) -> Self {
+        buf.raw
+    }
+}
+
+/// A buffer that holds elements of type `T`.
+pub struct Buffer<T> {
+    raw: RawBuffer,
+    _p: PhantomData<T>,
+}
+
+impl<T> Buffer<T> {
+    pub fn map(&mut self) -> Result<Mapping<'_, T>> {
+        let mut ptr = ptr::null_mut();
+        unsafe {
+            check(
+                self.raw
+                    .d
+                    .libva
+                    .vaMapBuffer(self.raw.d.raw, self.raw.id, &mut ptr),
+            )?;
+        }
+        Ok(Mapping {
+            d: &self.raw.d,
+            id: self.raw.id,
+            ptr: ptr.cast(),
+            capacity: self.raw.capacity,
+        })
+    }
+
+    pub fn sync(&mut self) -> Result<()> {
+        unsafe {
+            check(
+                self.raw
+                    .d
+                    .libva
+                    .vaSyncBuffer(self.raw.d.raw, self.raw.id, VA_TIMEOUT_INFINITE),
+            )
         }
     }
 }
@@ -783,6 +841,22 @@ pub struct Mapping<'a, T> {
 }
 
 impl<'a, T: Copy> Mapping<'a, T> {
+    /// Casts this [`Mapping`] to one with a different element type (and possibly length).
+    pub fn cast<U>(self) -> Mapping<'a, U>
+    where
+        T: AnyBitPattern + NoUninit,
+        U: AnyBitPattern,
+    {
+        let new_len = bytemuck::cast_slice::<T, U>(&self).len();
+
+        Mapping {
+            d: self.d,
+            id: self.id,
+            ptr: self.ptr.cast(),
+            capacity: new_len,
+        }
+    }
+
     pub fn write(&mut self, index: usize, value: T) {
         assert!(index < self.capacity && index < isize::MAX as usize);
         unsafe {
@@ -1018,8 +1092,6 @@ pub enum SurfaceAttribEnum {
     PixelFormat(PixelFormat),
     MemoryType(VASurfaceAttribMemoryType),
 }
-
-mod pixelformat;
 
 #[derive(Debug, Clone, Copy)]
 pub enum GenericValue {

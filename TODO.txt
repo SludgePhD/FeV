@@ -1,3 +1,5 @@
 - objects created from `Context` should keep the context alive via `Arc`
   - otherwise behavior becomes *very* weird (things finish instantly, but seemingly still happen in
     the background?)
+- canonicalize object construction pattern (parent object method vs. `fn new` that takes the parent)
+- fix soundness

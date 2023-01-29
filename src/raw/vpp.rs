@@ -54,17 +54,6 @@ pub struct FilterValueRange {
     va_reserve3d: [u32; VA_PADDING_LOW],
 }
 
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct ColorProperties {
-    pub chroma_sample_location: ChromaSiting,
-    pub color_range: SourceRange,
-    pub colour_primaries: u8,
-    pub transfer_characteristics: u8,
-    pub matrix_coefficients: u8,
-    reserved: [u8; 3],
-}
-
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct VABlendState {
@@ -76,7 +65,7 @@ pub struct VABlendState {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct PipelineParameterBuffer {
+pub struct VAProcPipelineParameterBuffer {
     pub surface: VASurfaceID,
     pub surface_region: *const VARectangle,
     pub surface_color_standard: ColorStandardType,

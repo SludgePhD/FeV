@@ -98,8 +98,7 @@ impl SliceParameterBuffer {
     ///
     /// - `base`: codec-independent slice parameters
     /// - `Ri`: number of MCUs per restart interval
-    /// - `num_mcus`: number of MCUs per scan - this is `Ri` times the number of restart intervals
-    ///   per scan, presumably
+    /// - `num_mcus`: total number of MCUs in this scan
     #[allow(non_snake_case)]
     pub fn new(base: SliceParameterBufferBase, Ri: u16, num_mcus: u32) -> Self {
         unsafe {

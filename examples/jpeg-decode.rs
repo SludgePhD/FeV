@@ -6,8 +6,10 @@ use jfifdump::SegmentKind;
 use raw_window_handle::HasRawDisplayHandle;
 use softbuffer::GraphicsContext;
 use v_ayylmao::{
-    jpeg, BufferType, Display, Entrypoint, PixelFormat, Profile, RTFormat,
-    SliceParameterBufferBase, SurfaceWithImage,
+    jpeg,
+    vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
+    BufferType, Display, Entrypoint, PixelFormat, Profile, RTFormat, SliceParameterBufferBase,
+    SurfaceWithImage,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -15,8 +17,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-
-const USE_RGBA_VAIMAGE: bool = true;
 
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
@@ -53,24 +53,25 @@ fn main() -> anyhow::Result<()> {
         .build(&ev)?;
     let handle = win.raw_display_handle();
 
-    let mut graphics_context = unsafe { GraphicsContext::new(win) }.unwrap();
+    let mut graphics_context = unsafe { GraphicsContext::new(&win, &win) }.unwrap();
 
     let display = Display::new(handle)?;
     let config = display.create_default_config(Profile::JPEGBaseline, Entrypoint::VLD)?;
-    let mut context = config.create_default_context(info.width.into(), info.height.into())?;
+    let mut jpeg_context = config.create_default_context(info.width.into(), info.height.into())?;
+    let config = display.create_default_config(Profile::None, Entrypoint::VideoProc)?;
+    let mut vpp_context = config.create_default_context(info.width.into(), info.height.into())?;
 
-    let mut surface = if USE_RGBA_VAIMAGE {
-        SurfaceWithImage::with_format(
-            &display,
-            info.width.into(),
-            info.height.into(),
-            RTFormat::default(),
-            PixelFormat::RGBA,
-        )?
-    } else {
-        SurfaceWithImage::with_default_format(&display, info.width.into(), info.height.into())?
-    };
-    log::debug!("Image = {:?}", surface.image());
+    let mut surface =
+        SurfaceWithImage::with_default_format(&display, info.width.into(), info.height.into())?;
+    let mut final_surface = SurfaceWithImage::with_surface_format(
+        &display,
+        info.width.into(),
+        info.height.into(),
+        RTFormat::RGB32,
+    )?;
+
+    log::debug!("intermediate image = {:?}", surface.image());
+    log::debug!("final image = {:?}", final_surface.image());
 
     let eoi;
     let mut max_h_factor = 0;
@@ -190,14 +191,14 @@ fn main() -> anyhow::Result<()> {
         dhtbuf.set_huffman_table(index as _, table);
     }
 
-    let mut buf_dht = context.create_param_buffer(BufferType::HuffmanTable, dhtbuf)?;
-    let mut buf_iq = context.create_param_buffer(BufferType::IQMatrix, iqbuf)?;
-    let mut buf_pp = context.create_param_buffer(BufferType::PictureParameter, ppbuf)?;
+    let mut buf_dht = jpeg_context.create_param_buffer(BufferType::HuffmanTable, dhtbuf)?;
+    let mut buf_iq = jpeg_context.create_param_buffer(BufferType::IQMatrix, iqbuf)?;
+    let mut buf_pp = jpeg_context.create_param_buffer(BufferType::PictureParameter, ppbuf)?;
     let mut buf_slice_param =
-        context.create_param_buffer(BufferType::SliceParameter, slice_params)?;
-    let mut buf_slice_data = context.create_data_buffer(BufferType::SliceData, &slice_data)?;
+        jpeg_context.create_param_buffer(BufferType::SliceParameter, slice_params)?;
+    let mut buf_slice_data = jpeg_context.create_data_buffer(BufferType::SliceData, &slice_data)?;
 
-    let mut picture = context.begin_picture(&mut surface)?;
+    let mut picture = jpeg_context.begin_picture(&mut surface)?;
     picture.render_picture(&mut buf_dht)?;
     picture.render_picture(&mut buf_iq)?;
     picture.render_picture(&mut buf_pp)?;
@@ -205,29 +206,36 @@ fn main() -> anyhow::Result<()> {
     picture.render_picture(&mut buf_slice_data)?;
     unsafe { picture.end_picture()? }
 
-    let status = surface.status()?;
-    log::trace!("surface status = {status:?}");
+    surface.sync()?;
 
-    let mapping = surface.map_sync()?;
-    let decoded_data: Vec<_> = if USE_RGBA_VAIMAGE {
-        mapping
-            .chunks(4)
-            .take(width as usize * height as usize) // ignore trailing padding bytes
-            .map(|pix| {
-                let [r, g, b] = [pix[0], pix[1], pix[2]].map(u32::from);
-                r << 16 | g << 8 | b
-            })
-            .collect()
-    } else {
-        mapping
-            .iter()
-            .take(width as usize * height as usize) // only take Y plane
-            .map(|y| {
-                let y = u32::from(*y);
-                y << 16 | y << 8 | y
-            })
-            .collect()
-    };
+    let mut pppbuf = ProcPipelineParameterBuffer::new(&surface);
+    // The input color space is the JPEG color space
+    pppbuf.set_input_color_properties(ColorProperties::new().with_color_range(SourceRange::FULL));
+    pppbuf.set_input_color_standard(ColorStandardType::BT601);
+    // The output color space is 8-bit non-linear sRGB
+    pppbuf.set_output_color_properties(ColorProperties::new().with_color_range(SourceRange::FULL));
+    pppbuf.set_output_color_standard(ColorStandardType::SRGB);
+
+    let mut pppbuf = vpp_context.create_param_buffer(BufferType::ProcPipelineParameter, pppbuf)?;
+
+    let mut picture = vpp_context.begin_picture(&mut final_surface)?;
+    picture.render_picture(&mut pppbuf)?;
+    unsafe { picture.end_picture()? }
+    drop(pppbuf);
+
+    let status = final_surface.status()?;
+    log::trace!("final surface status = {status:?}");
+
+    assert_eq!(final_surface.image().pixelformat(), PixelFormat::ARGB);
+    let mapping = final_surface.map_sync()?;
+    let decoded_data: Vec<_> = mapping
+        .chunks(4)
+        .take(width as usize * height as usize) // ignore trailing padding bytes
+        .map(|pix| {
+            let [b, g, r, _a] = [pix[0], pix[1], pix[2], pix[3]].map(u32::from);
+            r << 16 | g << 8 | b
+        })
+        .collect();
 
     let mut show_control_data = false;
     ev.run(move |event, _tgt, control_flow| {
@@ -236,7 +244,7 @@ fn main() -> anyhow::Result<()> {
         match event {
             Event::RedrawRequested(_) => {
                 let (width, height) = {
-                    let size = graphics_context.window().inner_size();
+                    let size = win.inner_size();
                     (size.width, size.height)
                 };
                 let data = if show_control_data {
@@ -245,9 +253,7 @@ fn main() -> anyhow::Result<()> {
                     &decoded_data
                 };
                 graphics_context.set_buffer(data, width as u16, height as u16);
-                graphics_context
-                    .window_mut()
-                    .set_title(&format!("control={}", show_control_data));
+                win.set_title(&format!("control={}", show_control_data));
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -274,7 +280,7 @@ fn main() -> anyhow::Result<()> {
                 ..
             } => {
                 show_control_data = !show_control_data;
-                graphics_context.window().request_redraw();
+                win.request_redraw();
             }
             _ => {}
         }

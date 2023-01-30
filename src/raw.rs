@@ -28,13 +28,6 @@ pub struct VARectangle {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct VAConfigAttrib {
-    type_: VAConfigAttribType,
-    value: u32,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
 pub struct VASurfaceAttrib {
     pub(crate) type_: VASurfaceAttribType,
     pub(crate) flags: VASurfaceAttribFlags,

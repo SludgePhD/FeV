@@ -28,6 +28,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("  - Entrypoint {:?}", entrypoint);
 
             let config = display.create_default_config(profile, entrypoint)?;
+            let attribs = config.query_config_attributes()?;
+            println!("    {} config attributes", attribs.len());
+            for attrib in attribs {
+                println!(
+                    "    - {:?}: {:08x}",
+                    attrib.attrib_type(),
+                    attrib.raw_value(),
+                );
+            }
             let attribs = match config.query_surface_attributes() {
                 Ok(attribs) => attribs,
                 Err(e) => {

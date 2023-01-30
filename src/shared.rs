@@ -153,7 +153,7 @@ ffi_enum! {
 }
 
 ffi_enum! {
-    pub enum VAConfigAttribType: c_int {
+    pub enum ConfigAttribType: c_int {
         RTFormat          = 0,
         SpatialResidual   = 1,
         SpatialClipping   = 2,
@@ -591,5 +591,28 @@ impl ImageFormat {
 impl Default for ImageFormat {
     fn default() -> Self {
         Self::new(PixelFormat::NV12)
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct ConfigAttrib {
+    type_: ConfigAttribType,
+    value: u32,
+}
+
+impl ConfigAttrib {
+    pub fn zeroed() -> Self {
+        unsafe { mem::zeroed() }
+    }
+
+    #[inline]
+    pub fn attrib_type(&self) -> ConfigAttribType {
+        self.type_
+    }
+
+    #[inline]
+    pub fn raw_value(&self) -> u32 {
+        self.value
     }
 }

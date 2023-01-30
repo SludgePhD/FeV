@@ -608,6 +608,33 @@ impl Config {
         }
     }
 
+    pub fn query_config_attributes(&self) -> Result<ConfigAttributes> {
+        let num_attribs = unsafe { self.d.libva.vaMaxNumConfigAttributes(self.d.raw) as usize };
+
+        let mut profile = Profile::None;
+        let mut entrypoint = Entrypoint::VLD;
+        let mut attrib_list = vec![ConfigAttrib::zeroed(); num_attribs];
+        let mut num_attribs = 0;
+        unsafe {
+            check(self.d.libva.vaQueryConfigAttributes(
+                self.d.raw,
+                self.id,
+                &mut profile,
+                &mut entrypoint,
+                attrib_list.as_mut_ptr(),
+                &mut num_attribs,
+            ))?;
+        }
+        attrib_list.truncate(num_attribs as usize);
+        attrib_list.shrink_to_fit();
+
+        Ok(ConfigAttributes {
+            profile,
+            entrypoint,
+            attribs: attrib_list,
+        })
+    }
+
     pub fn create_default_context(
         &self,
         picture_width: u32,
@@ -1038,6 +1065,35 @@ impl IntoIterator for ImageFormats {
 
     fn into_iter(self) -> Self::IntoIter {
         self.vec.into_iter()
+    }
+}
+
+pub struct ConfigAttributes {
+    profile: Profile,
+    entrypoint: Entrypoint,
+    attribs: Vec<ConfigAttrib>,
+}
+
+impl ConfigAttributes {
+    pub fn profile(&self) -> Profile {
+        self.profile
+    }
+
+    pub fn entrypoint(&self) -> Entrypoint {
+        self.entrypoint
+    }
+
+    pub fn len(&self) -> usize {
+        self.attribs.len()
+    }
+}
+
+impl IntoIterator for ConfigAttributes {
+    type Item = ConfigAttrib;
+    type IntoIter = vec::IntoIter<ConfigAttrib>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.attribs.into_iter()
     }
 }
 

@@ -80,10 +80,10 @@ dylib! {
     fn vaMaxNumConfigAttributes(dpy: VADisplay) -> c_int;
     fn vaQueryConfigProfiles(dpy: VADisplay, profile_list: *mut Profile, num_profiles: *mut c_int) -> VAStatus;
     fn vaQueryConfigEntrypoints(dpy: VADisplay, profile: Profile, entrypoint_list: *mut Entrypoint, num_entrypoints: *mut c_int) -> VAStatus;
-    fn vaGetConfigAttributes(dpy: VADisplay, profile: Profile, entrypoint: Entrypoint, attrib_list: *mut VAConfigAttrib, num_attribs: c_int) -> VAStatus;
-    fn vaCreateConfig(dpy: VADisplay, profile: Profile, entrypoint: Entrypoint, attrib_list: *mut VAConfigAttrib, num_attribs: c_int, config_id: *mut VAConfigID) -> VAStatus;
+    fn vaGetConfigAttributes(dpy: VADisplay, profile: Profile, entrypoint: Entrypoint, attrib_list: *mut ConfigAttrib, num_attribs: c_int) -> VAStatus;
+    fn vaCreateConfig(dpy: VADisplay, profile: Profile, entrypoint: Entrypoint, attrib_list: *mut ConfigAttrib, num_attribs: c_int, config_id: *mut VAConfigID) -> VAStatus;
     fn vaDestroyConfig(dpy: VADisplay, config_id: VAConfigID) -> VAStatus;
-    fn vaQueryConfigAttributes(dpy: VADisplay, config_id: VAConfigID, profile: *mut Profile, entrypoint: *mut Entrypoint, attrib_list: *mut VAConfigAttrib, num_attribs: *mut c_int) -> VAStatus;
+    fn vaQueryConfigAttributes(dpy: VADisplay, config_id: VAConfigID, profile: *mut Profile, entrypoint: *mut Entrypoint, attrib_list: *mut ConfigAttrib, num_attribs: *mut c_int) -> VAStatus;
     fn vaQuerySurfaceAttributes(dpy: VADisplay, config: VAConfigID, attrib_list: *mut VASurfaceAttrib, num_attribs: *mut c_uint) -> VAStatus;
     fn vaCreateSurfaces(dpy: VADisplay, format: RTFormat, width: c_uint, height: c_uint, surfaces: *mut VASurfaceID, num_surfaces: c_uint, attrib_list: *mut VASurfaceAttrib, num_attribs: c_uint) -> VAStatus;
     fn vaDestroySurfaces(dpy: VADisplay, surfaces: *mut VASurfaceID, num_surfaces: c_int) -> VAStatus;

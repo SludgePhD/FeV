@@ -1,9 +1,8 @@
-use std::{cmp, time::Instant};
+use std::{cmp, rc::Rc, time::Instant};
 
 use anyhow::{anyhow, bail};
 use byteorder::{ReadBytesExt, BE};
 use jfifdump::SegmentKind;
-use raw_window_handle::HasRawDisplayHandle;
 use softbuffer::GraphicsContext;
 use v_ayylmao::{
     jpeg,
@@ -51,11 +50,11 @@ fn main() -> anyhow::Result<()> {
         .with_inner_size(PhysicalSize::new(info.width, info.height))
         .with_resizable(false)
         .build(&ev)?;
-    let handle = win.raw_display_handle();
+    let win = Rc::new(win);
 
     let mut graphics_context = unsafe { GraphicsContext::new(&win, &win) }.unwrap();
 
-    let display = Display::new(handle)?;
+    let display = Display::new(win.clone())?;
     let config = display.create_default_config(Profile::JPEGBaseline, Entrypoint::VLD)?;
     let mut jpeg_context = config.create_default_context(info.width.into(), info.height.into())?;
     let config = display.create_default_config(Profile::None, Entrypoint::VideoProc)?;
@@ -221,10 +220,11 @@ fn main() -> anyhow::Result<()> {
     let mut picture = vpp_context.begin_picture(&mut final_surface)?;
     picture.render_picture(&mut pppbuf)?;
     unsafe { picture.end_picture()? }
-    drop(pppbuf);
 
     let status = final_surface.status()?;
     log::trace!("final surface status = {status:?}");
+
+    drop(pppbuf);
 
     assert_eq!(final_surface.image().pixelformat(), PixelFormat::ARGB);
     let mapping = final_surface.map_sync()?;

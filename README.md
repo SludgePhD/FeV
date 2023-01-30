@@ -12,3 +12,6 @@ acceleration is available, they should fall back to software decoding.
 - Blatantly unsound API
 - Completely unmaintained (developed only for my own personal amusement)
 - Exposes almost none of the features VA-API has
+- Crashes your program with a segfault when you have an AMD GPU
+- Might even crash the entire graphics driver when you have an AMD GPU
+- Really, you should probably not even read this README if you're on AMD

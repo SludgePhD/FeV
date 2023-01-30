@@ -1,6 +1,5 @@
 use std::error::Error;
 
-use raw_window_handle::HasRawDisplayHandle;
 use v_ayylmao::Display;
 use winit::{event_loop::EventLoop, window::Window};
 
@@ -11,9 +10,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let ev = EventLoop::new();
     let win = Window::new(&ev)?;
-    let handle = win.raw_display_handle();
 
-    let display = Display::new(handle)?;
+    let display = Display::new(win)?;
     println!(
         "API Version: {}.{}",
         display.version_major(),

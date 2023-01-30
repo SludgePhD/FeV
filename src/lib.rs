@@ -14,7 +14,7 @@ use std::{
 
 use bytemuck::{AnyBitPattern, NoUninit, Pod};
 use dlopen::{libva, libva_drm, libva_wayland, libva_x11};
-use raw_window_handle::RawDisplayHandle;
+use raw_window_handle::{HasRawDisplayHandle, RawDisplayHandle};
 
 #[macro_use]
 mod macros;
@@ -49,6 +49,8 @@ pub enum DisplayApi {
 struct DisplayOwner {
     raw: VADisplay,
     libva: &'static libva,
+    #[allow(dead_code)]
+    display_handle_owner: Option<Box<dyn HasRawDisplayHandle>>,
 }
 
 impl fmt::Debug for DisplayOwner {
@@ -77,7 +79,29 @@ pub struct Display {
 }
 
 impl Display {
-    pub fn new(handle: RawDisplayHandle) -> Result<Self> {
+    /// Opens a VA-API display from an owned display handle.
+    ///
+    /// This function takes ownership of `handle` to ensure that the native display handle isn't
+    /// closed before the VA-API [`Display`] is dropped.
+    pub fn new<H: HasRawDisplayHandle + 'static>(handle: H) -> Result<Self> {
+        Self::new_impl(handle.raw_display_handle(), Some(Box::new(handle)))
+    }
+
+    /// Opens a VA-API display from a raw, native display handle with unmanaged lifetime.
+    ///
+    /// # Safety
+    ///
+    /// It is the user's responsibility to ensure that the native display handle `handle` remains
+    /// valid until the last VA-API object created from this [`Display`] (including the [`Display`]
+    /// itself) has been destroyed.
+    pub unsafe fn new_unmanaged<H: HasRawDisplayHandle>(handle: &H) -> Result<Self> {
+        Self::new_impl(handle.raw_display_handle(), None)
+    }
+
+    fn new_impl(
+        handle: RawDisplayHandle,
+        display_handle_owner: Option<Box<dyn HasRawDisplayHandle>>,
+    ) -> Result<Self> {
         unsafe {
             let raw: VADisplay;
             let api = match handle {
@@ -124,7 +148,11 @@ impl Display {
             log::info!("initialized libva {major}.{minor}");
 
             Ok(Self {
-                d: Arc::new(DisplayOwner { raw, libva }),
+                d: Arc::new(DisplayOwner {
+                    raw,
+                    libva,
+                    display_handle_owner,
+                }),
                 libva,
                 api,
                 major: major as _,
@@ -336,7 +364,12 @@ impl SurfaceWithImage {
         // Try to use `vaDeriveImage` first, fall back if that fails.
         match surface.derive_image() {
             Ok(image) => {
-                log::trace!("using vaDeriveImage for fast surface access");
+                log::trace!(
+                    "using vaDeriveImage for fast surface access \
+                    (surface format = {:?}, image format = {:?})",
+                    surface_format,
+                    image.pixelformat(),
+                );
 
                 Ok(Self {
                     surface,

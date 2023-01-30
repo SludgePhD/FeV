@@ -173,6 +173,7 @@ pub struct HuffmanTable {
 }
 
 impl HuffmanTable {
+    /// Returns the default [`HuffmanTable`] to use for luminance data.
     #[rustfmt::skip]
     pub fn default_luminance() -> Self {
         let mut this = Self::zeroed();
@@ -209,6 +210,7 @@ impl HuffmanTable {
         this
     }
 
+    /// Returns the default [`HuffmanTable`] to use for chrominance data.
     #[rustfmt::skip]
     pub fn default_chrominance() -> Self {
         let mut this = Self::zeroed();

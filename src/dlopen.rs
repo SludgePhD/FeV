@@ -84,8 +84,8 @@ dylib! {
     fn vaCreateConfig(dpy: VADisplay, profile: Profile, entrypoint: Entrypoint, attrib_list: *mut ConfigAttrib, num_attribs: c_int, config_id: *mut VAConfigID) -> VAStatus;
     fn vaDestroyConfig(dpy: VADisplay, config_id: VAConfigID) -> VAStatus;
     fn vaQueryConfigAttributes(dpy: VADisplay, config_id: VAConfigID, profile: *mut Profile, entrypoint: *mut Entrypoint, attrib_list: *mut ConfigAttrib, num_attribs: *mut c_int) -> VAStatus;
-    fn vaQuerySurfaceAttributes(dpy: VADisplay, config: VAConfigID, attrib_list: *mut VASurfaceAttrib, num_attribs: *mut c_uint) -> VAStatus;
-    fn vaCreateSurfaces(dpy: VADisplay, format: RTFormat, width: c_uint, height: c_uint, surfaces: *mut VASurfaceID, num_surfaces: c_uint, attrib_list: *mut VASurfaceAttrib, num_attribs: c_uint) -> VAStatus;
+    fn vaQuerySurfaceAttributes(dpy: VADisplay, config: VAConfigID, attrib_list: *mut SurfaceAttrib, num_attribs: *mut c_uint) -> VAStatus;
+    fn vaCreateSurfaces(dpy: VADisplay, format: RTFormat, width: c_uint, height: c_uint, surfaces: *mut VASurfaceID, num_surfaces: c_uint, attrib_list: *mut SurfaceAttrib, num_attribs: c_uint) -> VAStatus;
     fn vaDestroySurfaces(dpy: VADisplay, surfaces: *mut VASurfaceID, num_surfaces: c_int) -> VAStatus;
     fn vaCreateContext(dpy: VADisplay, config_id: VAConfigID, picture_width: c_int, picture_height: c_int, flag: c_int, render_targets: *mut VASurfaceID, num_render_targets: c_int, context: *mut VAContextID) -> VAStatus;
     fn vaDestroyContext(dpy: VADisplay, context: VAContextID) -> VAStatus;
@@ -100,7 +100,7 @@ dylib! {
     fn vaDestroyBuffer(dpy: VADisplay, buffer_id: VABufferID) -> VAStatus;
     fn vaAcquireBufferHandle(dpy: VADisplay, buf_id: VABufferID, buf_info: *mut VABufferInfo) -> VAStatus;
     fn vaReleaseBufferHandle(dpy: VADisplay, buf_id: VABufferID) -> VAStatus;
-    fn vaExportSurfaceHandle(dpy: VADisplay, surface_id: VASurfaceID, mem_type: VASurfaceAttribMemoryType, flags: VAExportSurface, descriptor: *mut c_void) -> VAStatus;
+    fn vaExportSurfaceHandle(dpy: VADisplay, surface_id: VASurfaceID, mem_type: SurfaceAttribMemoryType, flags: VAExportSurface, descriptor: *mut c_void) -> VAStatus;
     fn vaBeginPicture(dpy: VADisplay, context: VAContextID, render_target: VASurfaceID) -> VAStatus;
     fn vaRenderPicture(dpy: VADisplay, context: VAContextID, buffers: *mut VABufferID, num_buffers: c_int) -> VAStatus;
     fn vaEndPicture(dpy: VADisplay, context: VAContextID) -> VAStatus;

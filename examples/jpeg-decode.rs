@@ -7,7 +7,7 @@ use softbuffer::GraphicsContext;
 use v_ayylmao::{
     jpeg,
     vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
-    BufferType, Display, Entrypoint, PixelFormat, Profile, RTFormat, SliceParameterBufferBase,
+    BufferType, Display, Entrypoint, PixelFormat, Profile, SliceParameterBufferBase,
     SurfaceWithImage,
 };
 use winit::{
@@ -60,13 +60,17 @@ fn main() -> anyhow::Result<()> {
     let config = display.create_default_config(Profile::None, Entrypoint::VideoProc)?;
     let mut vpp_context = config.create_default_context(info.width.into(), info.height.into())?;
 
-    let mut surface =
-        SurfaceWithImage::with_default_format(&display, info.width.into(), info.height.into())?;
-    let mut final_surface = SurfaceWithImage::with_surface_format(
+    let mut surface = SurfaceWithImage::new(
         &display,
         info.width.into(),
         info.height.into(),
-        RTFormat::RGB32,
+        PixelFormat::NV12,
+    )?;
+    let mut final_surface = SurfaceWithImage::new(
+        &display,
+        info.width.into(),
+        info.height.into(),
+        PixelFormat::RGBA,
     )?;
 
     log::debug!("intermediate image = {:?}", surface.image());
@@ -206,6 +210,7 @@ fn main() -> anyhow::Result<()> {
     unsafe { picture.end_picture()? }
 
     surface.sync()?;
+    log::debug!("synced jpeg output surface");
 
     let mut pppbuf = ProcPipelineParameterBuffer::new(&surface);
     // The input color space is the JPEG color space
@@ -220,13 +225,14 @@ fn main() -> anyhow::Result<()> {
     let mut picture = vpp_context.begin_picture(&mut final_surface)?;
     picture.render_picture(&mut pppbuf)?;
     unsafe { picture.end_picture()? }
+    log::debug!("submitted VPP op");
 
-    let status = final_surface.status()?;
-    log::trace!("final surface status = {status:?}");
+    final_surface.sync()?;
+    log::debug!("synced final surface");
 
     drop(pppbuf);
 
-    assert_eq!(final_surface.image().pixelformat(), PixelFormat::ARGB);
+    assert_eq!(final_surface.image().pixelformat(), PixelFormat::RGBA);
     let mapping = final_surface.map_sync()?;
     let decoded_data: Vec<_> = mapping
         .chunks(4)

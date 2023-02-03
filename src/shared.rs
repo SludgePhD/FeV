@@ -5,13 +5,19 @@
 pub mod jpeg;
 pub mod vpp;
 
+use core::fmt;
 use std::{
-    ffi::CStr,
+    ffi::{c_void, CStr},
     mem,
     os::raw::{c_int, c_uint},
 };
 
-use crate::{dlopen::libva, pixelformat::PixelFormat, raw::VA_PADDING_LOW, Error};
+use crate::{
+    dlopen::libva,
+    pixelformat::PixelFormat,
+    raw::{VAGenericFunc, VAGenericValueUnion, VA_PADDING_LOW},
+    Error,
+};
 
 ffi_enum! {
     pub enum VAStatus: c_int {
@@ -220,7 +226,7 @@ ffi_enum! {
 }
 
 ffi_enum! {
-    pub enum VASurfaceAttribType: c_int {
+    pub enum SurfaceAttribType: c_int {
         None = 0,
         PixelFormat = 1,
         MinWidth = 2,
@@ -356,15 +362,170 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct SurfaceAttrib {
+    type_: SurfaceAttribType,
+    flags: SurfaceAttribFlags,
+    value: GenericValue,
+}
+
+impl SurfaceAttrib {
+    #[inline]
+    pub fn ty(&self) -> SurfaceAttribType {
+        self.type_
+    }
+
+    #[inline]
+    pub fn flags(&self) -> SurfaceAttribFlags {
+        self.flags
+    }
+
+    pub fn is_readable(&self) -> bool {
+        self.flags.contains(SurfaceAttribFlags::GETTABLE)
+    }
+
+    pub fn is_writable(&self) -> bool {
+        self.flags.contains(SurfaceAttribFlags::SETTABLE)
+    }
+
+    #[inline]
+    pub fn raw_value(&self) -> GenericValue {
+        self.value
+    }
+
+    pub fn as_enum(&self) -> Option<SurfaceAttribEnum> {
+        Some(match self.type_ {
+            SurfaceAttribType::PixelFormat => SurfaceAttribEnum::PixelFormat(
+                PixelFormat::from_u32_le(self.raw_value().as_int()? as u32),
+            ),
+            SurfaceAttribType::MemoryType => SurfaceAttribEnum::MemoryType(
+                SurfaceAttribMemoryType::from_bits_truncate(self.raw_value().as_int()? as u32),
+            ),
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SurfaceAttribEnum {
+    PixelFormat(PixelFormat),
+    MemoryType(SurfaceAttribMemoryType),
+}
+
+impl From<SurfaceAttribEnum> for SurfaceAttrib {
+    fn from(value: SurfaceAttribEnum) -> Self {
+        let (ty, value) = match value {
+            SurfaceAttribEnum::PixelFormat(format) => (
+                SurfaceAttribType::PixelFormat,
+                GenericValue::int(format.to_u32_le() as i32),
+            ),
+            SurfaceAttribEnum::MemoryType(ty) => (
+                SurfaceAttribType::MemoryType,
+                GenericValue::int(ty.bits() as i32),
+            ),
+        };
+
+        Self {
+            type_: ty,
+            flags: SurfaceAttribFlags::SETTABLE,
+            value,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct GenericValue {
+    type_: VAGenericValueType,
+    value: VAGenericValueUnion,
+}
+
+impl GenericValue {
+    pub fn int(i: i32) -> Self {
+        Self {
+            type_: VAGenericValueType::Integer,
+            value: VAGenericValueUnion { i },
+        }
+    }
+
+    pub fn float(f: f32) -> Self {
+        Self {
+            type_: VAGenericValueType::Float,
+            value: VAGenericValueUnion { f },
+        }
+    }
+
+    pub fn as_int(self) -> Option<i32> {
+        if self.type_ == VAGenericValueType::Integer {
+            unsafe { Some(self.value.i) }
+        } else {
+            None
+        }
+    }
+
+    pub fn as_float(self) -> Option<f32> {
+        if self.type_ == VAGenericValueType::Float {
+            unsafe { Some(self.value.f) }
+        } else {
+            None
+        }
+    }
+
+    pub fn as_pointer(self) -> Option<*mut c_void> {
+        if self.type_ == VAGenericValueType::Pointer {
+            unsafe { Some(self.value.p) }
+        } else {
+            None
+        }
+    }
+
+    pub fn as_func(self) -> Option<VAGenericFunc> {
+        if self.type_ == VAGenericValueType::Func {
+            unsafe { Some(self.value.func) }
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Debug for GenericValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.type_ {
+            VAGenericValueType::Integer => {
+                f.debug_tuple("Int").field(&self.as_int().unwrap()).finish()
+            }
+            VAGenericValueType::Float => f
+                .debug_tuple("Float")
+                .field(&self.as_float().unwrap())
+                .finish(),
+            VAGenericValueType::Pointer => f
+                .debug_tuple("Pointer")
+                .field(&self.as_pointer().unwrap())
+                .finish(),
+            VAGenericValueType::Func => f
+                .debug_tuple("Func")
+                .field(&self.as_func().unwrap())
+                .finish(),
+            _ => f
+                .debug_struct("GenericValue")
+                .field("type", &self.type_)
+                .field("value", unsafe { &self.value.p })
+                .finish(),
+        }
+    }
+}
+
 bitflags! {
-    pub struct VASurfaceAttribFlags: c_int {
+    pub struct SurfaceAttribFlags: c_int {
         const GETTABLE = 0x00000001;
         const SETTABLE = 0x00000002;
     }
 }
 
 bitflags! {
-    pub struct VASurfaceAttribMemoryType: u32 {
+    pub struct SurfaceAttribMemoryType: u32 {
         // Generic types
         const VA       = 0x00000001;
         const V4L2     = 0x00000002;
@@ -406,13 +567,6 @@ bitflags! {
         const RGBP      = 0x00100000;
         const RGB32_10  = 0x00200000;
         const PROTECTED = 0x80000000;
-    }
-}
-
-impl Default for RTFormat {
-    #[inline]
-    fn default() -> Self {
-        Self::YUV420
     }
 }
 

@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::RTFormat;
+
 /// A FourCC code identifying a pixel format.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -52,6 +54,18 @@ impl PixelFormat {
 
     pub const fn to_u32_le(self) -> u32 {
         self.0
+    }
+
+    /// Returns a surface [`RTFormat`] compatible with this [`PixelFormat`].
+    ///
+    /// Returns [`None`] when `self` is an unknown or unhandled [`PixelFormat`].
+    pub fn to_rtformat(self) -> Option<RTFormat> {
+        Some(match self {
+            Self::NV12 => RTFormat::YUV420,
+            Self::NV21 => RTFormat::YUV420,
+            Self::RGBA | Self::RGBX | Self::ARGB | Self::BGRA | Self::BGRX => RTFormat::RGB32,
+            _ => return None,
+        })
     }
 }
 

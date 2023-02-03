@@ -28,21 +28,6 @@ pub struct VARectangle {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct VASurfaceAttrib {
-    pub(crate) type_: VASurfaceAttribType,
-    pub(crate) flags: VASurfaceAttribFlags,
-    pub(crate) value: VAGenericValue,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct VAGenericValue {
-    pub type_: VAGenericValueType,
-    pub value: VAGenericValueUnion,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
 pub union VAGenericValueUnion {
     pub i: i32,
     pub f: f32,

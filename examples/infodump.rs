@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use v_ayylmao::{Display, Entrypoint, Profile};
+use v_ayylmao::{ConfigAttribType, Display, Entrypoint, Profile, RTFormat};
 use winit::{event_loop::EventLoop, window::Window};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -31,11 +31,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let attribs = config.query_config_attributes()?;
             println!("    {} config attributes", attribs.len());
             for attrib in attribs {
-                println!(
-                    "    - {:?}: {:08x}",
-                    attrib.attrib_type(),
-                    attrib.raw_value(),
-                );
+                print!("    - {:?} ", attrib.attrib_type());
+
+                if attrib.attrib_type() == ConfigAttribType::RTFormat {
+                    println!("{:?}", RTFormat::from_bits_truncate(attrib.raw_value()));
+                } else {
+                    println!("{:08x}", attrib.raw_value());
+                }
             }
             let attribs = match config.query_surface_attributes() {
                 Ok(attribs) => attribs,
@@ -53,10 +55,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     print!("{:?}", attrib.flags());
                     if let Some(value) = attrib.as_enum() {
                         print!(" {:?}", value);
-                    } else if let Some(value) = attrib.raw_value() {
-                        print!(" {:?}", value);
                     } else {
-                        print!(" (failed to decode value)");
+                        print!(" {:?}", attrib.raw_value());
                     }
                 }
                 println!();

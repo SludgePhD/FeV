@@ -31,8 +31,8 @@ pub use pixelformat::PixelFormat;
 pub use shared::*;
 
 use raw::{
-    VABufferID, VAConfigID, VAContextID, VADisplay, VADisplayAttribute, VAGenericFunc,
-    VAGenericValue, VAImage, VASurfaceAttrib, VASurfaceID, VA_TIMEOUT_INFINITE,
+    VABufferID, VAConfigID, VAContextID, VADisplay, VADisplayAttribute, VAImage, VASurfaceID,
+    VA_TIMEOUT_INFINITE,
 };
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -268,7 +268,7 @@ impl Display {
         format: RTFormat,
         width: u32,
         height: u32,
-        attribs: &mut [VASurfaceAttrib],
+        attribs: &mut [SurfaceAttrib],
     ) -> Result<Surface> {
         let mut id = 0;
         unsafe {
@@ -341,25 +341,24 @@ pub struct SurfaceWithImage {
 }
 
 impl SurfaceWithImage {
-    /// Creates a surface and image of the given resolution, using default pixel formats.
-    pub fn with_default_format(display: &Display, width: u32, height: u32) -> Result<Self> {
-        Self::with_surface_format(display, width, height, RTFormat::default())
-    }
+    /// Creates a new [`SurfaceWithImage`] of the given dimensions.
+    ///
+    /// The [`RTFormat`] of the [`Surface`] will be determined automatically based on the specified
+    /// [`PixelFormat`].
+    pub fn new(display: &Display, width: u32, height: u32, format: PixelFormat) -> Result<Self> {
+        let rtformat = format.to_rtformat().ok_or_else(|| {
+            Error::from(format!(
+                "pixel format {:?} is unknown or unimplemented",
+                format
+            ))
+        })?;
 
-    /// Creates a surface and image of the given resolution and surface format.
-    ///
-    /// The [`Image`]s format will be picked by the driver to be compatible with the given surface
-    /// format.
-    ///
-    /// If supported by the driver, `vaDeriveImage` will be used instead of copying from surface to
-    /// image.
-    pub fn with_surface_format(
-        display: &Display,
-        width: u32,
-        height: u32,
-        surface_format: RTFormat,
-    ) -> Result<Self> {
-        let mut surface = display.create_surface(surface_format, width, height, &mut [])?;
+        let mut surface = display.create_surface(
+            rtformat,
+            width,
+            height,
+            &mut [SurfaceAttribEnum::PixelFormat(format).into()],
+        )?;
 
         // Try to use `vaDeriveImage` first, fall back if that fails.
         match surface.derive_image() {
@@ -367,8 +366,8 @@ impl SurfaceWithImage {
                 log::trace!(
                     "using vaDeriveImage for fast surface access \
                     (surface format = {:?}, image format = {:?})",
-                    surface_format,
-                    image.pixelformat(),
+                    rtformat,
+                    format,
                 );
 
                 Ok(Self {
@@ -378,9 +377,9 @@ impl SurfaceWithImage {
                 })
             }
             Err(e) if e.as_libva() == Some(VAError::ERROR_OPERATION_FAILED) => {
-                log::trace!("vaDeriveImage not supported, using vaGetImage");
+                log::trace!("vaDeriveImage not supported, using vaGetImage (surface format = {:?}, image format = {:?})", rtformat, format);
 
-                let image = display.create_image(ImageFormat::default(), width, height)?;
+                let image = display.create_image(ImageFormat::new(format), width, height)?;
                 Ok(Self {
                     surface,
                     image,
@@ -389,24 +388,6 @@ impl SurfaceWithImage {
             }
             Err(e) => Err(e),
         }
-    }
-
-    pub fn with_formats(
-        display: &Display,
-        width: u32,
-        height: u32,
-        surface_format: RTFormat,
-        image_format: PixelFormat,
-    ) -> Result<Self> {
-        // `vaDeriveImage` gives us an arbitrary image format, so we don't use that here.
-        let surface = display.create_surface(surface_format, width, height, &mut [])?;
-
-        let image = display.create_image(ImageFormat::new(image_format), width, height)?;
-        Ok(Self {
-            surface,
-            image,
-            derived: false,
-        })
     }
 
     #[inline]
@@ -1099,7 +1080,7 @@ impl IntoIterator for ConfigAttributes {
 
 #[derive(Clone)]
 pub struct SurfaceAttributes {
-    vec: Vec<VASurfaceAttrib>,
+    vec: Vec<SurfaceAttrib>,
 }
 
 impl SurfaceAttributes {
@@ -1117,116 +1098,19 @@ impl SurfaceAttributes {
     ///
     /// When querying surface attributes, this is the list of supported pixel formats.
     pub fn pixel_formats(&self) -> impl Iterator<Item = PixelFormat> + '_ {
-        self.vec.iter().filter_map(|attr| match attr.as_enum()? {
-            SurfaceAttribEnum::PixelFormat(f) => Some(f),
+        self.vec.iter().filter_map(|attr| match attr.as_enum() {
+            Some(SurfaceAttribEnum::PixelFormat(fmt)) => Some(fmt),
             _ => None,
         })
     }
 }
 
 impl IntoIterator for SurfaceAttributes {
-    type Item = VASurfaceAttrib;
-    type IntoIter = vec::IntoIter<VASurfaceAttrib>;
+    type Item = SurfaceAttrib;
+    type IntoIter = vec::IntoIter<SurfaceAttrib>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.vec.into_iter()
-    }
-}
-
-impl VASurfaceAttrib {
-    #[inline]
-    pub fn ty(&self) -> VASurfaceAttribType {
-        self.type_
-    }
-
-    #[inline]
-    pub fn flags(&self) -> VASurfaceAttribFlags {
-        self.flags
-    }
-
-    pub fn is_readable(&self) -> bool {
-        self.flags.contains(VASurfaceAttribFlags::GETTABLE)
-    }
-
-    pub fn is_writable(&self) -> bool {
-        self.flags.contains(VASurfaceAttribFlags::SETTABLE)
-    }
-
-    pub fn as_enum(&self) -> Option<SurfaceAttribEnum> {
-        Some(match self.type_ {
-            VASurfaceAttribType::PixelFormat => {
-                SurfaceAttribEnum::PixelFormat(PixelFormat::from_u32_le(self.as_int()? as u32))
-            }
-            VASurfaceAttribType::MemoryType => unsafe {
-                SurfaceAttribEnum::MemoryType(VASurfaceAttribMemoryType::from_bits_unchecked(
-                    self.as_int()? as u32,
-                ))
-            },
-            _ => return None,
-        })
-    }
-
-    pub fn raw_value(&self) -> Option<GenericValue> {
-        unsafe { GenericValue::from_raw(self.value) }
-    }
-
-    pub fn as_int(&self) -> Option<i32> {
-        self.raw_value().and_then(GenericValue::as_int)
-    }
-}
-
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum SurfaceAttribEnum {
-    PixelFormat(PixelFormat),
-    MemoryType(VASurfaceAttribMemoryType),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum GenericValue {
-    Int(i32),
-    Float(f32),
-    Pointer(*mut c_void),
-    Func(VAGenericFunc),
-}
-
-impl GenericValue {
-    unsafe fn from_raw(raw: VAGenericValue) -> Option<Self> {
-        Some(match raw.type_ {
-            VAGenericValueType::Integer => Self::Int(raw.value.i),
-            VAGenericValueType::Float => Self::Float(raw.value.f),
-            VAGenericValueType::Pointer => Self::Pointer(raw.value.p),
-            VAGenericValueType::Func => Self::Func(raw.value.func),
-            _ => return None,
-        })
-    }
-
-    pub fn as_int(self) -> Option<i32> {
-        match self {
-            Self::Int(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    pub fn as_float(self) -> Option<f32> {
-        match self {
-            Self::Float(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    pub fn as_ptr(self) -> Option<*mut c_void> {
-        match self {
-            Self::Pointer(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    pub fn as_func(self) -> Option<VAGenericFunc> {
-        match self {
-            Self::Func(v) => Some(v),
-            _ => None,
-        }
     }
 }
 

@@ -21,6 +21,16 @@ impl PixelFormat {
     /// Planar YUV 4:2:0 pixel format, with U and V swapped compared to `NV12`.
     pub const NV21: Self = f(b"NV21");
 
+    /// Interleaved YUV 4:2:2, stored in memory as `yyyyyyyy uuuuuuuu YYYYYYYY vvvvvvvv`.
+    ///
+    /// `uuuuuuuu` and `vvvvvvvv` are shared by 2 neighboring pixels.
+    pub const YUY2: Self = f(b"YUY2");
+
+    /// Interleaved YUV 4:2:2, stored in memory as `uuuuuuuu yyyyyyyy vvvvvvvv YYYYYYYY`.
+    ///
+    /// `uuuuuuuu` and `vvvvvvvv` are shared by 2 neighboring pixels.
+    pub const UYVY: Self = f(b"UVYV");
+
     /// `RGBA`: Packed 8-bit RGBA, stored in memory as `aaaaaaaa bbbbbbbb gggggggg rrrrrrrr`.
     pub const RGBA: Self = f(b"RGBA");
 
@@ -61,8 +71,8 @@ impl PixelFormat {
     /// Returns [`None`] when `self` is an unknown or unhandled [`PixelFormat`].
     pub fn to_rtformat(self) -> Option<RTFormat> {
         Some(match self {
-            Self::NV12 => RTFormat::YUV420,
-            Self::NV21 => RTFormat::YUV420,
+            Self::NV12 | Self::NV21 => RTFormat::YUV420,
+            Self::YUY2 | Self::UYVY => RTFormat::YUV422,
             Self::RGBA | Self::RGBX | Self::ARGB | Self::BGRA | Self::BGRX => RTFormat::RGB32,
             _ => return None,
         })

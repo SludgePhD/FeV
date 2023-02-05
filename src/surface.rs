@@ -1,4 +1,4 @@
-//! [`Surface`]s to decode to or encode from.
+//! [`Surface`]s and surface attributes.
 
 use core::fmt;
 use std::{
@@ -22,10 +22,15 @@ use crate::{
 };
 
 bitflags! {
-    pub struct ExportSurface: u32 {
+    /// Flags for configuring how a [`Surface`] should be exported.
+    pub struct ExportSurfaceFlags: u32 {
+        /// Export the surface to be read by an external consumer.
         const READ = 0x0001;
+        /// Export the surface to be written to by an external application.
         const WRITE = 0x0002;
+        /// Export the surface's layers separately.
         const SEPARATE_LAYERS = 0x0004;
+        /// Export all layers of the surface in one object.
         const COMPOSED_LAYERS = 0x0008;
     }
 }
@@ -98,6 +103,7 @@ impl SurfaceAttrib {
     }
 }
 
+/// Collection of supported [`SurfaceAttrib`]s.
 #[derive(Clone)]
 pub struct SurfaceAttributes {
     pub(crate) vec: Vec<SurfaceAttrib>,
@@ -144,6 +150,7 @@ ffi_enum! {
 }
 
 ffi_enum! {
+    /// Enumeration of the available surface attribute types.
     pub enum SurfaceAttribType: c_int {
         None = 0,
         PixelFormat = 1,
@@ -159,9 +166,13 @@ ffi_enum! {
 }
 
 ffi_enum! {
+    /// Surface rendering status.
     pub enum SurfaceStatus: c_int {
+        /// The surface is being rendered to (or from).
         Rendering = 1,
+        /// The surface is being displayed.
         Displaying = 2,
+        /// The surface is unused and idle.
         Ready = 4,
         Skipped = 8,
     }
@@ -194,6 +205,7 @@ union VAGenericValueUnion {
     func: VAGenericFunc,
 }
 
+/// Dynamically typed value of a [`SurfaceAttrib`].
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct GenericValue {
@@ -277,6 +289,7 @@ impl fmt::Debug for GenericValue {
 }
 
 bitflags! {
+    /// Flags associated with a queried [`SurfaceAttrib`].
     pub struct SurfaceAttribFlags: c_int {
         const GETTABLE = 0x00000001;
         const SETTABLE = 0x00000002;

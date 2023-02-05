@@ -18,7 +18,7 @@ use crate::{
     raw::*,
     subpicture::SubpictureFlags,
     surface::SurfaceStatus,
-    surface::{ExportSurface, RTFormat, SurfaceAttrib, SurfaceAttribMemoryType},
+    surface::{ExportSurfaceFlags, RTFormat, SurfaceAttrib, SurfaceAttribMemoryType},
     vpp::{FilterType, RawProcPipelineCaps},
     Entrypoint, Profile,
 };
@@ -115,7 +115,7 @@ dylib! {
     fn vaDestroyBuffer(dpy: VADisplay, buffer_id: VABufferID) -> VAStatus;
     fn vaAcquireBufferHandle(dpy: VADisplay, buf_id: VABufferID, buf_info: *mut VABufferInfo) -> VAStatus;
     fn vaReleaseBufferHandle(dpy: VADisplay, buf_id: VABufferID) -> VAStatus;
-    fn vaExportSurfaceHandle(dpy: VADisplay, surface_id: VASurfaceID, mem_type: SurfaceAttribMemoryType, flags: ExportSurface, descriptor: *mut c_void) -> VAStatus;
+    fn vaExportSurfaceHandle(dpy: VADisplay, surface_id: VASurfaceID, mem_type: SurfaceAttribMemoryType, flags: ExportSurfaceFlags, descriptor: *mut c_void) -> VAStatus;
     fn vaBeginPicture(dpy: VADisplay, context: VAContextID, render_target: VASurfaceID) -> VAStatus;
     fn vaRenderPicture(dpy: VADisplay, context: VAContextID, buffers: *mut VABufferID, num_buffers: c_int) -> VAStatus;
     fn vaEndPicture(dpy: VADisplay, context: VAContextID) -> VAStatus;

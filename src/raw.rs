@@ -1,12 +1,9 @@
-#![allow(non_upper_case_globals)]
-#![allow(dead_code)]
-
 use std::{
     ffi::c_void,
     os::raw::{c_char, c_int, c_uint},
 };
 
-use crate::{buffer::BufferType, shared::*};
+use crate::buffer::BufferType;
 
 pub const VA_PADDING_LOW: usize = 4;
 pub const VA_PADDING_MEDIUM: usize = 8;
@@ -55,16 +52,6 @@ pub struct VABufferInfo {
     mem_type: u32,
     mem_size: usize, // size_t
     va_reserved: [u32; VA_PADDING_LOW],
-}
-
-#[repr(C)]
-pub struct VASurfaceDecodeMBErrors {
-    pub status: i32,
-    pub start_mb: u32,
-    pub end_mb: u32,
-    pub decode_error_type: DecodeErrorType,
-    pub num_mb: u32,
-    va_reserved: [u32; VA_PADDING_LOW - 1],
 }
 
 pub type VADisplay = *mut c_void;

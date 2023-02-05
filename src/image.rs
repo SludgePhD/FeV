@@ -12,9 +12,10 @@ use std::{
 use crate::{
     buffer::Mapping,
     check, check_log,
-    display::DisplayOwner,
+    display::{Display, DisplayOwner},
+    pixelformat::PixelFormat,
     raw::{VABufferID, VAImageID, VA_PADDING_LOW},
-    Display, Error, PixelFormat, Result,
+    Error, Result,
 };
 
 ffi_enum! {

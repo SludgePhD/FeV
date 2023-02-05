@@ -13,9 +13,10 @@ use bytemuck::{AnyBitPattern, NoUninit, Pod};
 
 use crate::{
     check, check_log,
+    context::Context,
     display::DisplayOwner,
     raw::{VABufferID, VA_TIMEOUT_INFINITE},
-    Context, Result,
+    Result,
 };
 
 ffi_enum! {

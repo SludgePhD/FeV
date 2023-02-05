@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use v_ayylmao::Display;
+use v_ayylmao::display::Display;
 use winit::{event_loop::EventLoop, window::Window};
 
 fn main() -> Result<(), Box<dyn Error>> {

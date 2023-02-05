@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 license = "0BSD"
 description = "High-level VA-API bindings"
-keywords = ["va-api", "libva", "video", "decode", "acceleration"]
+keywords = ["libva", "video", "decode", "codec", "acceleration"]
 
 [dependencies]
 libloading = "0.7.3"

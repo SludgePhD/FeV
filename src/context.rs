@@ -3,8 +3,8 @@
 use std::{ptr, sync::Arc};
 
 use crate::{
-    buffer::Buffer, check, check_log, display::DisplayOwner, raw::VAContextID, Config, Result,
-    Surface,
+    buffer::Buffer, check, check_log, config::Config, display::DisplayOwner, raw::VAContextID,
+    surface::Surface, Result,
 };
 
 /// A codec, configured for a video operation.

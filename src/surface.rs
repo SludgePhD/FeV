@@ -13,11 +13,12 @@ use std::{
 use crate::{
     buffer::Mapping,
     check, check_log,
-    display::DisplayOwner,
+    display::{Display, DisplayOwner},
     error::VAError,
     image::{Image, ImageFormat},
-    raw::{VAGenericFunc, VASurfaceID},
-    Display, Error, PixelFormat, Result,
+    pixelformat::PixelFormat,
+    raw::{VAGenericFunc, VASurfaceID, VA_PADDING_LOW},
+    Error, Result,
 };
 
 bitflags! {
@@ -164,6 +165,24 @@ ffi_enum! {
         Ready = 4,
         Skipped = 8,
     }
+}
+
+ffi_enum! {
+    pub enum DecodeErrorType: c_int {
+        SliceMissing = 0,
+        /// Macroblock decoding error.
+        MBError = 1,
+    }
+}
+
+#[repr(C)]
+pub struct SurfaceDecodeMBErrors {
+    status: i32,
+    start_mb: u32,
+    end_mb: u32,
+    decode_error_type: DecodeErrorType,
+    num_mb: u32,
+    va_reserved: [u32; VA_PADDING_LOW - 1],
 }
 
 #[derive(Clone, Copy)]
@@ -401,8 +420,9 @@ impl Drop for Surface {
     }
 }
 
-/// Bundles together a [`Surface`] and an [`Image`] with a matching format, and allows transferring
-/// data between them.
+/// Bundles a [`Surface`] and [`Image`] with matching formats.
+///
+/// Allows copying surface contents to the image.
 ///
 /// If the driver supports `vaDeriveImage`, this type can automatically avoid copying between the
 /// two.
@@ -462,6 +482,11 @@ impl SurfaceWithImage {
             }
             Err(e) => Err(e),
         }
+    }
+
+    #[inline]
+    pub fn surface(&self) -> &Surface {
+        &self.surface
     }
 
     #[inline]

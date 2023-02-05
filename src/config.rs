@@ -4,10 +4,10 @@ use std::{ffi::c_int, mem, ptr, sync::Arc, vec};
 
 use crate::{
     check, check_log,
-    display::DisplayOwner,
+    display::{Display, DisplayOwner},
     raw::VAConfigID,
     surface::{RTFormat, SurfaceAttributes},
-    Display, Entrypoint, Profile, Result, VAError, VAStatus,
+    Entrypoint, Profile, Result, VAError, VAStatus,
 };
 
 ffi_enum! {

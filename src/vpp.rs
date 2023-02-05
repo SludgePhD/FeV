@@ -9,8 +9,11 @@ use std::{ffi::c_uint, marker::PhantomData, mem, slice, vec};
 use crate::{
     buffer::{Buffer, RawBuffer},
     check,
+    context::Context,
+    pixelformat::PixelFormat,
     raw::{Rectangle, VABufferID, VASurfaceID, VA_PADDING_HIGH, VA_PADDING_LARGE, VA_PADDING_LOW},
-    Context, Mirror, PixelFormat, Result, Rotation, Surface,
+    surface::Surface,
+    Mirror, Result, Rotation,
 };
 
 impl Context {
@@ -117,6 +120,7 @@ impl Context {
 }
 
 ffi_enum! {
+    /// Enumeration of all known filter types.
     pub enum FilterType: u32 {
         None = 0,
         NoiseReduction = 1,
@@ -132,6 +136,7 @@ ffi_enum! {
 }
 
 ffi_enum! {
+    /// Enumeration of the deinterlacing algorithm types.
     pub enum DeinterlacingType: u32 {
         None = 0,
         Bob = 1,
@@ -155,21 +160,28 @@ ffi_enum! {
 }
 
 ffi_enum! {
+    /// Enumeration of the known color standards.
     pub enum ColorStandardType: u32 {
         /// Unknown/Arbitrary.
         None = 0,
-        /// The color standard used by JPEG/JFIF images.
+        /// ITU-R BT.601. The color standard used by JPEG/JFIF images.
         BT601 = 1,
+        /// ITU-R BT.709.
         BT709 = 2,
+        /// ITU-R BT.470-2 System M.
         BT470M = 3,
+        /// ITU-R BT.470-2 System B, G.
         BT470BG = 4,
+        /// SMPTE-170M.
         SMPTE170M = 5,
+        /// SMPTE-240M.
         SMPTE240M = 6,
         GenericFilm = 7,
         SRGB = 8,
         STRGB = 9,
         XVYCC601 = 10,
         XVYCC709 = 11,
+        /// ITU-R BT.2020.
         BT2020 = 12,
         Explicit = 13,
     }
@@ -195,6 +207,7 @@ ffi_enum! {
 }
 
 ffi_enum! {
+    /// Video processing performance mode.
     pub enum ProcMode: u32 {
         DefaultMode = 0,
         PowerSavingMode = 1,
@@ -211,6 +224,7 @@ bitflags! {
 }
 
 bitflags! {
+    /// Flags that may be applied to a video processing pipeline.
     pub struct PipelineFlags: u32 {
         const SUBPICTURES = 0x00000001;
         const FAST        = 0x00000002;
@@ -219,6 +233,7 @@ bitflags! {
 }
 
 bitflags! {
+    /// Flags and properties that may be applied to each individual filter stage.
     pub struct FilterFlags: u32 {
         const MANDATORY     = 0x00000001;
 
@@ -243,6 +258,7 @@ bitflags! {
 }
 
 bitflags! {
+    /// The supported [`Rotation`]s.
     pub struct RotationFlags: u32 {
         const R90 = 1 << Rotation::R90.0;
         const R180 = 1 << Rotation::R180.0;
@@ -251,6 +267,7 @@ bitflags! {
 }
 
 ffi_enum! {
+    /// The location of the chroma samples.
     pub enum ChromaSiting: u8 {
         UNKNOWN           = 0x00,
         VERTICAL_TOP      = 0x01,
@@ -262,6 +279,7 @@ ffi_enum! {
 }
 
 ffi_enum! {
+    /// Input or output color range.
     pub enum SourceRange: u8 {
         /// Unknown, Arbitrary color range.
         UNKNOWN = 0,
@@ -285,6 +303,7 @@ bitflags! {
     }
 }
 
+/// Color-related properties of a video processing pipeline.
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct ColorProperties {
@@ -334,6 +353,7 @@ impl ColorProperties {
     }
 }
 
+/// Collection of supported [`FilterType`]s.
 pub struct FilterTypes {
     filters: Vec<FilterType>,
 }
@@ -527,6 +547,9 @@ pub struct FilterParameterBuffer {
     va_reserved: [u32; VA_PADDING_LOW],
 }
 
+/// Capabilities of a video processing pipeline.
+///
+/// Returned by [`Context::query_video_processing_pipeline_caps`].
 pub struct ProcPipelineCaps {
     raw: RawProcPipelineCaps,
     input_color_standards: Vec<ColorStandardType>,

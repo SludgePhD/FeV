@@ -1,7 +1,11 @@
 use std::error::Error;
 
 use v_ayylmao::{
-    config::ConfigAttribType, surface::RTFormat, vpp::Filters, Config, Context, Display,
+    config::{Config, ConfigAttribType},
+    context::Context,
+    display::Display,
+    surface::RTFormat,
+    vpp::Filters,
     Entrypoint, Profile,
 };
 use winit::{event_loop::EventLoop, window::Window};

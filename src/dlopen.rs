@@ -16,10 +16,12 @@ use crate::{
     error::VAStatus,
     image::{ImageFormat, VAImage},
     raw::*,
+    subpicture::SubpictureFlags,
+    surface::SurfaceStatus,
     surface::{ExportSurface, RTFormat, SurfaceAttrib, SurfaceAttribMemoryType},
     vpp::{FilterType, RawProcPipelineCaps},
+    Entrypoint, Profile,
 };
-use crate::{shared::*, surface::SurfaceStatus};
 
 use once_cell::sync::OnceCell;
 
@@ -138,7 +140,21 @@ dylib! {
     fn vaSetSubpictureImage(dpy: VADisplay, subpicture: VASubpictureID, image: VAImageID) -> VAStatus;
     fn vaSetSubpictureChromakey(dpy: VADisplay, subpicture: VASubpictureID, chromakey_min: c_uint, chromakey_max: c_uint, chromakey_mask: c_uint) -> VAStatus;
     fn vaSetSubpictureGlobalAlpha(dpy: VADisplay, subpicture: VASubpictureID, global_alpha: c_float) -> VAStatus;
-    fn vaAssociateSubpicture(dpy: VADisplay, subpicture: VASubpictureID, target_surfaces: *mut VASurfaceID, num_surfaces: c_int, src_x: i32, src_y: i32, src_width: u16, src_height: u16, dest_x: i16, dest_y: i16, dest_width: u16, dest_height: u16, flags: SubpictureFlags) -> VAStatus;
+    fn vaAssociateSubpicture(
+        dpy: VADisplay,
+        subpicture: VASubpictureID,
+        target_surfaces: *mut VASurfaceID,
+        num_surfaces: c_int,
+        src_x: i32,
+        src_y: i32,
+        src_width: u16,
+        src_height: u16,
+        dest_x: i16,
+        dest_y: i16,
+        dest_width: u16,
+        dest_height: u16,
+        flags: SubpictureFlags,
+    ) -> VAStatus;
     fn vaDeassociateSubpicture(dpy: VADisplay, subpicture: VASubpictureID, target_surfaces: *mut VASurfaceID, num_surfaces: c_int) -> VAStatus;
     fn vaMaxNumDisplayAttributes(dpy: VADisplay) -> c_int;
     fn vaQueryDisplayAttributes(dpy: VADisplay, attr_list: *mut DisplayAttribute, num_attributes: *mut c_int) -> VAStatus;

@@ -48,22 +48,22 @@ impl IQMatrixBuffer {
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct PictureParameterBuffer {
-    pub picture_width: u16,
-    pub picture_height: u16,
-    pub components: [Component; 255],
-    pub num_components: u8,
-    pub color_space: ColorSpace,
-    pub rotation: Rotation,
+    picture_width: u16,
+    picture_height: u16,
+    components: [Component; 255],
+    num_components: u8,
+    color_space: ColorSpace,
+    rotation: Rotation,
     va_reserved: [u32; VA_PADDING_MEDIUM - 1],
 }
 
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Component {
-    pub component_id: u8,
-    pub h_sampling_factor: u8,
-    pub v_sampling_factor: u8,
-    pub quantiser_table_selector: u8,
+    component_id: u8,
+    h_sampling_factor: u8,
+    v_sampling_factor: u8,
+    quantiser_table_selector: u8,
 }
 
 impl PictureParameterBuffer {

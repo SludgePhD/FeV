@@ -3,6 +3,7 @@
 use core::fmt;
 use std::{
     ffi::{c_char, c_int, c_void, CStr},
+    mem,
     panic::catch_unwind,
     ptr,
     sync::Arc,
@@ -14,10 +15,10 @@ use raw_window_handle::{HasRawDisplayHandle, RawDisplayHandle};
 use crate::{
     check, check_log,
     dlopen::{libva, libva_drm, libva_wayland, libva_x11},
-    image::ImageFormats,
+    image::{ImageFormat, ImageFormats},
     raw::{VADisplay, VA_PADDING_LOW},
     subpicture::{SubpictureFlags, SubpictureFormats},
-    Entrypoints, Error, Profile, Profiles, Result,
+    Entrypoint, Entrypoints, Error, Profile, Profiles, Result,
 };
 
 ffi_enum! {
@@ -65,31 +66,11 @@ pub struct DisplayAttribute {
     va_reserved: [u32; VA_PADDING_LOW],
 }
 
-#[derive(Clone)]
-pub struct DisplayAttributes {
-    pub(crate) vec: Vec<DisplayAttribute>,
-}
-
-impl DisplayAttributes {
-    pub fn len(&self) -> usize {
-        self.vec.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.vec.is_empty()
-    }
-}
-
-impl IntoIterator for DisplayAttributes {
-    type Item = DisplayAttribute;
-    type IntoIter = vec::IntoIter<DisplayAttribute>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.vec.into_iter()
-    }
-}
-
 impl DisplayAttribute {
+    pub(crate) fn zeroed() -> Self {
+        unsafe { mem::zeroed() }
+    }
+
     pub fn new(ty: DisplayAttribType, value: i32) -> Self {
         let mut this: Self = unsafe { std::mem::zeroed() };
         this.type_ = ty;
@@ -115,6 +96,30 @@ impl DisplayAttribute {
 
     pub fn flags(&self) -> DisplayAttribFlags {
         self.flags
+    }
+}
+
+#[derive(Clone)]
+pub struct DisplayAttributes {
+    pub(crate) vec: Vec<DisplayAttribute>,
+}
+
+impl DisplayAttributes {
+    pub fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.vec.is_empty()
+    }
+}
+
+impl IntoIterator for DisplayAttributes {
+    type Item = DisplayAttribute;
+    type IntoIter = vec::IntoIter<DisplayAttribute>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.vec.into_iter()
     }
 }
 
@@ -277,49 +282,49 @@ impl Display {
 
     /// Queries the supported [`Profiles`].
     pub fn query_profiles(&self) -> Result<Profiles> {
+        let max = unsafe { self.d.libva.vaMaxNumProfiles(self.d.raw) as usize };
+        let mut profiles = vec![Profile(0); max];
+        let mut num = 0;
         unsafe {
-            let max = self.d.libva.vaMaxNumProfiles(self.d.raw) as usize;
-            let mut profiles = Vec::with_capacity(max);
-            let mut num = 0;
             check(
                 self.d
                     .libva
                     .vaQueryConfigProfiles(self.d.raw, profiles.as_mut_ptr(), &mut num),
             )?;
-            profiles.set_len(num as usize);
-            Ok(Profiles { vec: profiles })
         }
+        profiles.truncate(num as usize);
+        Ok(Profiles { vec: profiles })
     }
 
     /// Queries supported [`Entrypoints`] for the given [`Profile`].
     pub fn query_entrypoints(&self, profile: Profile) -> Result<Entrypoints> {
+        let max = unsafe { self.d.libva.vaMaxNumEntrypoints(self.d.raw) as usize };
+        let mut entrypoints = vec![Entrypoint(0); max];
+        let mut num = 0;
         unsafe {
-            let max = self.d.libva.vaMaxNumEntrypoints(self.d.raw) as usize;
-            let mut entrypoints = Vec::with_capacity(max);
-            let mut num = 0;
             check(self.d.libva.vaQueryConfigEntrypoints(
                 self.d.raw,
                 profile,
                 entrypoints.as_mut_ptr(),
                 &mut num,
             ))?;
-            entrypoints.set_len(num as usize);
-            Ok(Entrypoints { vec: entrypoints })
         }
+        entrypoints.truncate(num as usize);
+        Ok(Entrypoints { vec: entrypoints })
     }
 
     /// Queries the supported [`ImageFormat`][crate::image::ImageFormat]s.
     pub fn query_image_formats(&self) -> Result<ImageFormats> {
         unsafe {
             let max = self.d.libva.vaMaxNumImageFormats(self.d.raw) as usize;
-            let mut formats = Vec::with_capacity(max);
+            let mut formats = vec![ImageFormat::zeroed(); max];
             let mut num = 0;
             check(
                 self.d
                     .libva
                     .vaQueryImageFormats(self.d.raw, formats.as_mut_ptr(), &mut num),
             )?;
-            formats.set_len(num as usize);
+            formats.truncate(num as usize);
             Ok(ImageFormats { vec: formats })
         }
     }
@@ -327,8 +332,8 @@ impl Display {
     pub fn query_subpicture_format(&self) -> Result<SubpictureFormats> {
         unsafe {
             let max = self.d.libva.vaMaxNumSubpictureFormats(self.d.raw) as usize;
-            let mut formats = Vec::with_capacity(max);
-            let mut flags: Vec<SubpictureFlags> = Vec::with_capacity(max);
+            let mut formats = vec![ImageFormat::zeroed(); max];
+            let mut flags: Vec<SubpictureFlags> = vec![SubpictureFlags::empty(); max];
             let mut num = 0;
             check(self.d.libva.vaQuerySubpictureFormats(
                 self.d.raw,
@@ -336,26 +341,26 @@ impl Display {
                 flags.as_mut_ptr().cast(),
                 &mut num,
             ))?;
-            formats.set_len(num as usize);
-            flags.set_len(num as usize);
+            formats.truncate(num as usize);
+            flags.truncate(num as usize);
 
             Ok(SubpictureFormats { formats, flags })
         }
     }
 
     pub fn query_display_attributes(&self) -> Result<DisplayAttributes> {
+        let max = unsafe { self.d.libva.vaMaxNumDisplayAttributes(self.d.raw) as usize };
+        let mut attribs = vec![DisplayAttribute::zeroed(); max];
+        let mut num = 0;
         unsafe {
-            let max = self.d.libva.vaMaxNumDisplayAttributes(self.d.raw) as usize;
-            let mut attribs = Vec::with_capacity(max);
-            let mut num = 0;
             check(self.d.libva.vaQueryDisplayAttributes(
                 self.d.raw,
                 attribs.as_mut_ptr(),
                 &mut num,
             ))?;
-            attribs.set_len(num as usize);
-            Ok(DisplayAttributes { vec: attribs })
         }
+        attribs.truncate(num as usize);
+        Ok(DisplayAttributes { vec: attribs })
     }
 
     pub fn set_driver_name(&mut self, name: &str) -> Result<()> {

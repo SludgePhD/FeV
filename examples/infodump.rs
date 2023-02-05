@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             img.blue_mask(),
             img.alpha_mask(),
         );
-        println!("  {:?}", format.flags());
+        println!("  Flags: {:?}", format.flags());
     }
 
     let display_attributes = display.query_display_attributes()?;

@@ -41,6 +41,10 @@ pub struct ImageFormat {
 }
 
 impl ImageFormat {
+    pub(crate) fn zeroed() -> Self {
+        unsafe { mem::zeroed() }
+    }
+
     pub fn new(pixel_format: PixelFormat) -> Self {
         Self {
             fourcc: pixel_format,

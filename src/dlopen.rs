@@ -17,7 +17,7 @@ use crate::{
     image::{ImageFormat, VAImage},
     raw::*,
     surface::{ExportSurface, RTFormat, SurfaceAttrib, SurfaceAttribMemoryType},
-    vpp::{FilterType, ProcPipelineCaps},
+    vpp::{FilterType, RawProcPipelineCaps},
 };
 use crate::{shared::*, surface::SurfaceStatus};
 
@@ -147,7 +147,7 @@ dylib! {
 
     fn vaQueryVideoProcFilters(dpy: VADisplay, context: VAContextID, filters: *mut FilterType, num_filters: *mut c_uint) -> VAStatus;
     fn vaQueryVideoProcFilterCaps(dpy: VADisplay, context: VAContextID, type_: FilterType, filter_caps: *mut c_void, num_filter_caps: *mut c_uint) -> VAStatus;
-    fn vaQueryVideoProcPipelineCaps(dpy: VADisplay, context: VAContextID, filters: *mut VABufferID, num_filters: c_uint, pipeline_caps: *mut ProcPipelineCaps) -> VAStatus;
+    fn vaQueryVideoProcPipelineCaps(dpy: VADisplay, context: VAContextID, filters: *mut VABufferID, num_filters: c_uint, pipeline_caps: *mut RawProcPipelineCaps) -> VAStatus;
 }
 
 dylib! {

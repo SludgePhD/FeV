@@ -51,9 +51,21 @@ impl Context {
         &self,
         filters: &mut Filters,
     ) -> Result<ProcPipelineCaps> {
-        // TODO: also query color standards, pixel formats, etc.
+        let mut input_color_standards = vec![ColorStandardType(0); 32];
+        let mut output_color_standards = vec![ColorStandardType(0); 32];
+        let mut input_pixel_formats = vec![PixelFormat::from_u32_le(0); 32];
+        let mut output_pixel_formats = vec![PixelFormat::from_u32_le(0); 32];
+
         unsafe {
-            let mut caps: ProcPipelineCaps = mem::zeroed();
+            let mut caps: RawProcPipelineCaps = mem::zeroed();
+            caps.input_color_standards = input_color_standards.as_mut_ptr();
+            caps.num_input_color_standards = input_color_standards.len() as _;
+            caps.output_color_standards = output_color_standards.as_mut_ptr();
+            caps.num_output_color_standards = output_color_standards.len() as _;
+            caps.input_pixel_format = input_pixel_formats.as_mut_ptr();
+            caps.num_input_pixel_formats = input_pixel_formats.len() as _;
+            caps.output_pixel_format = output_pixel_formats.as_mut_ptr();
+            caps.num_output_pixel_formats = output_pixel_formats.len() as _;
             check(self.d.libva.vaQueryVideoProcPipelineCaps(
                 self.d.raw,
                 self.id,
@@ -61,7 +73,19 @@ impl Context {
                 filters.len().try_into().unwrap(),
                 &mut caps,
             ))?;
-            Ok(caps)
+
+            input_color_standards.truncate(caps.num_input_color_standards as _);
+            output_color_standards.truncate(caps.num_output_color_standards as _);
+            input_pixel_formats.truncate(caps.num_input_pixel_formats as _);
+            output_pixel_formats.truncate(caps.num_output_pixel_formats as _);
+
+            Ok(ProcPipelineCaps {
+                raw: caps,
+                input_color_standards,
+                output_color_standards,
+                input_pixel_formats,
+                output_pixel_formats,
+            })
         }
     }
 }
@@ -189,6 +213,14 @@ bitflags! {
         const FILTER_INTERPOLATION_NEAREST_NEIGHBOR = 0x00001000;
         const FILTER_INTERPOLATION_BILINEAR         = 0x00002000;
         const FILTER_INTERPOLATION_ADVANCED         = 0x00003000;
+    }
+}
+
+bitflags! {
+    pub struct RotationFlags: u32 {
+        const R90 = 1 << Rotation::R90.0;
+        const R180 = 1 << Rotation::R180.0;
+        const R270 = 1 << Rotation::R270.0;
     }
 }
 
@@ -469,9 +501,59 @@ pub struct FilterParameterBuffer {
     va_reserved: [u32; VA_PADDING_LOW],
 }
 
-#[derive(Clone, Copy)]
-#[repr(C)]
 pub struct ProcPipelineCaps {
+    raw: RawProcPipelineCaps,
+    input_color_standards: Vec<ColorStandardType>,
+    output_color_standards: Vec<ColorStandardType>,
+    input_pixel_formats: Vec<PixelFormat>,
+    output_pixel_formats: Vec<PixelFormat>,
+}
+
+impl ProcPipelineCaps {
+    #[inline]
+    pub fn pipeline_flags(&self) -> PipelineFlags {
+        self.raw.pipeline_flags
+    }
+
+    #[inline]
+    pub fn filter_flags(&self) -> FilterFlags {
+        self.raw.filter_flags
+    }
+
+    #[inline]
+    pub fn num_forward_references(&self) -> u32 {
+        self.raw.num_forward_references
+    }
+
+    #[inline]
+    pub fn num_backward_references(&self) -> u32 {
+        self.raw.num_backward_references
+    }
+
+    #[inline]
+    pub fn input_color_standards(&self) -> &[ColorStandardType] {
+        &self.input_color_standards
+    }
+
+    #[inline]
+    pub fn output_color_standards(&self) -> &[ColorStandardType] {
+        &self.output_color_standards
+    }
+
+    #[inline]
+    pub fn input_pixel_formats(&self) -> &[PixelFormat] {
+        &self.input_pixel_formats
+    }
+
+    #[inline]
+    pub fn output_pixel_formats(&self) -> &[PixelFormat] {
+        &self.output_pixel_formats
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub(crate) struct RawProcPipelineCaps {
     pipeline_flags: PipelineFlags,
     filter_flags: FilterFlags,
     num_forward_references: u32,
@@ -480,7 +562,7 @@ pub struct ProcPipelineCaps {
     num_input_color_standards: u32,
     output_color_standards: *const ColorStandardType,
     num_output_color_standards: u32,
-    rotation_flags: u32,
+    rotation_flags: RotationFlags,
     blend_flags: BlendFlags,
     mirror_flags: Mirror,
     num_additional_outputs: u32,
@@ -505,13 +587,4 @@ pub struct ProcPipelineCaps {
     } else {
         VA_PADDING_HIGH
     }],
-}
-
-impl ProcPipelineCaps {
-    #[inline]
-    pub fn filter_flags(&self) -> FilterFlags {
-        self.filter_flags
-    }
-
-    // TODO: fill this in
 }

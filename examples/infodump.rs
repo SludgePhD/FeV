@@ -1,7 +1,8 @@
 use std::error::Error;
 
 use v_ayylmao::{
-    config::ConfigAttribType, surface::RTFormat, Config, Context, Display, Entrypoint, Profile,
+    config::ConfigAttribType, surface::RTFormat, vpp::Filters, Config, Context, Display,
+    Entrypoint, Profile,
 };
 use winit::{event_loop::EventLoop, window::Window};
 
@@ -107,6 +108,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         for filter in proc_filters {
             println!("- {:?}", filter);
         }
+
+        let caps = context.query_video_processing_pipeline_caps(&mut Filters::new())?;
+        println!("Empty pipeline capabilities:");
+        println!("- Pipeline Flags: {:?}", caps.pipeline_flags());
+        println!("- Filter Flags: {:?}", caps.filter_flags());
+        println!(
+            "- Input Color Standards: {:?}",
+            caps.input_color_standards()
+        );
+        println!(
+            "- Output Color Standards: {:?}",
+            caps.output_color_standards()
+        );
+        println!("- Input Pixel Formats: {:?}", caps.input_pixel_formats());
+        println!("- Output Pixel Formats: {:?}", caps.output_pixel_formats());
     }
 
     Ok(())

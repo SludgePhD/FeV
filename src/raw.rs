@@ -1,15 +1,12 @@
 #![allow(non_upper_case_globals)]
 #![allow(dead_code)]
 
-pub mod jpeg;
-pub mod vpp;
-
 use std::{
     ffi::c_void,
     os::raw::{c_char, c_int, c_uint},
 };
 
-use crate::shared::*;
+use crate::{buffer::BufferType, shared::*};
 
 pub const VA_PADDING_LOW: usize = 4;
 pub const VA_PADDING_MEDIUM: usize = 8;
@@ -19,20 +16,11 @@ pub const VA_TIMEOUT_INFINITE: u64 = 0xFFFFFFFFFFFFFFFF;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
-pub struct VARectangle {
-    pub x: i16,
-    pub y: i16,
-    pub width: u16,
-    pub height: u16,
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub union VAGenericValueUnion {
-    pub i: i32,
-    pub f: f32,
-    pub p: *mut c_void,
-    pub func: VAGenericFunc,
+pub struct Rectangle {
+    x: i16,
+    y: i16,
+    width: u16,
+    height: u16,
 }
 
 #[derive(Clone, Copy)]
@@ -74,38 +62,9 @@ pub struct VASurfaceDecodeMBErrors {
     pub status: i32,
     pub start_mb: u32,
     pub end_mb: u32,
-    pub decode_error_type: VADecodeErrorType,
+    pub decode_error_type: DecodeErrorType,
     pub num_mb: u32,
     va_reserved: [u32; VA_PADDING_LOW - 1],
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct VAImage {
-    pub image_id: VAImageID,
-    pub format: ImageFormat,
-    pub buf: VABufferID,
-    pub width: u16,
-    pub height: u16,
-    pub data_size: u32,
-    pub num_planes: u32,
-    pub pitches: [u32; 3],
-    pub offsets: [u32; 3],
-    pub num_palette_entries: i32,
-    pub entry_bytes: i32,
-    pub component_order: [i8; 4],
-    va_reserved: [u32; VA_PADDING_LOW],
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct VADisplayAttribute {
-    pub(crate) type_: VADisplayAttribType,
-    pub(crate) min_value: i32,
-    pub(crate) max_value: i32,
-    pub(crate) value: i32,
-    pub(crate) flags: VADisplayAttribFlags,
-    va_reserved: [u32; VA_PADDING_LOW],
 }
 
 pub type VADisplay = *mut c_void;

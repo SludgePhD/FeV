@@ -1,3 +1,7 @@
+//! Contains all the native function bindings.
+//!
+//! Types used by the bindings are defined throughout the library.
+
 #![allow(bad_style)]
 
 use std::{
@@ -5,8 +9,17 @@ use std::{
     os::raw::{c_char, c_float, c_int, c_uchar, c_uint},
 };
 
-use crate::raw::{vpp::VAProcPipelineCaps, *};
-use crate::shared::{vpp::*, *};
+use crate::{
+    buffer::BufferType,
+    config::ConfigAttrib,
+    display::DisplayAttribute,
+    error::VAStatus,
+    image::{ImageFormat, VAImage},
+    raw::*,
+    surface::{ExportSurface, RTFormat, SurfaceAttrib, SurfaceAttribMemoryType},
+    vpp::{FilterType, ProcPipelineCaps},
+};
+use crate::{shared::*, surface::SurfaceStatus};
 
 use once_cell::sync::OnceCell;
 
@@ -20,7 +33,7 @@ macro_rules! dylib {
         )+
     ) => {
         $(
-            pub type $func = unsafe extern "C" fn( $( $name : $t ),* ) $( -> $ret )?;
+            pub(crate) type $func = unsafe extern "C" fn( $( $name : $t ),* ) $( -> $ret )?;
         )+
 
         pub struct $strukt {
@@ -55,7 +68,7 @@ macro_rules! dylib {
             }
 
             $(
-                pub unsafe fn $func( &self, $( $name : $t ),* ) $( -> $ret )? {
+                pub(crate) unsafe fn $func( &self, $( $name : $t ),* ) $( -> $ret )? {
                     (self.$func)($($name),*)
                 }
             )+
@@ -100,7 +113,7 @@ dylib! {
     fn vaDestroyBuffer(dpy: VADisplay, buffer_id: VABufferID) -> VAStatus;
     fn vaAcquireBufferHandle(dpy: VADisplay, buf_id: VABufferID, buf_info: *mut VABufferInfo) -> VAStatus;
     fn vaReleaseBufferHandle(dpy: VADisplay, buf_id: VABufferID) -> VAStatus;
-    fn vaExportSurfaceHandle(dpy: VADisplay, surface_id: VASurfaceID, mem_type: SurfaceAttribMemoryType, flags: VAExportSurface, descriptor: *mut c_void) -> VAStatus;
+    fn vaExportSurfaceHandle(dpy: VADisplay, surface_id: VASurfaceID, mem_type: SurfaceAttribMemoryType, flags: ExportSurface, descriptor: *mut c_void) -> VAStatus;
     fn vaBeginPicture(dpy: VADisplay, context: VAContextID, render_target: VASurfaceID) -> VAStatus;
     fn vaRenderPicture(dpy: VADisplay, context: VAContextID, buffers: *mut VABufferID, num_buffers: c_int) -> VAStatus;
     fn vaEndPicture(dpy: VADisplay, context: VAContextID) -> VAStatus;
@@ -125,16 +138,16 @@ dylib! {
     fn vaSetSubpictureImage(dpy: VADisplay, subpicture: VASubpictureID, image: VAImageID) -> VAStatus;
     fn vaSetSubpictureChromakey(dpy: VADisplay, subpicture: VASubpictureID, chromakey_min: c_uint, chromakey_max: c_uint, chromakey_mask: c_uint) -> VAStatus;
     fn vaSetSubpictureGlobalAlpha(dpy: VADisplay, subpicture: VASubpictureID, global_alpha: c_float) -> VAStatus;
-    fn vaAssociateSubpicture(dpy: VADisplay, subpicture: VASubpictureID, target_surfaces: *mut VASurfaceID, num_surfaces: c_int, src_x: i32, src_y: i32, src_width: u16, src_height: u16, dest_x: i16, dest_y: i16, dest_width: u16, dest_height: u16, flags: VASubpictureFlags) -> VAStatus;
+    fn vaAssociateSubpicture(dpy: VADisplay, subpicture: VASubpictureID, target_surfaces: *mut VASurfaceID, num_surfaces: c_int, src_x: i32, src_y: i32, src_width: u16, src_height: u16, dest_x: i16, dest_y: i16, dest_width: u16, dest_height: u16, flags: SubpictureFlags) -> VAStatus;
     fn vaDeassociateSubpicture(dpy: VADisplay, subpicture: VASubpictureID, target_surfaces: *mut VASurfaceID, num_surfaces: c_int) -> VAStatus;
     fn vaMaxNumDisplayAttributes(dpy: VADisplay) -> c_int;
-    fn vaQueryDisplayAttributes(dpy: VADisplay, attr_list: *mut VADisplayAttribute, num_attributes: *mut c_int) -> VAStatus;
-    fn vaGetDisplayAttributes(dpy: VADisplay, attr_list: *mut VADisplayAttribute, num_attributes: c_int) -> VAStatus;
-    fn vaSetDisplayAttributes(dpy: VADisplay, attr_list: *mut VADisplayAttribute, num_attributes: c_int) -> VAStatus;
+    fn vaQueryDisplayAttributes(dpy: VADisplay, attr_list: *mut DisplayAttribute, num_attributes: *mut c_int) -> VAStatus;
+    fn vaGetDisplayAttributes(dpy: VADisplay, attr_list: *mut DisplayAttribute, num_attributes: c_int) -> VAStatus;
+    fn vaSetDisplayAttributes(dpy: VADisplay, attr_list: *mut DisplayAttribute, num_attributes: c_int) -> VAStatus;
 
     fn vaQueryVideoProcFilters(dpy: VADisplay, context: VAContextID, filters: *mut FilterType, num_filters: *mut c_uint) -> VAStatus;
     fn vaQueryVideoProcFilterCaps(dpy: VADisplay, context: VAContextID, type_: FilterType, filter_caps: *mut c_void, num_filter_caps: *mut c_uint) -> VAStatus;
-    fn vaQueryVideoProcPipelineCaps(dpy: VADisplay, context: VAContextID, filters: *mut VABufferID, num_filters: c_uint, pipeline_caps: *mut VAProcPipelineCaps) -> VAStatus;
+    fn vaQueryVideoProcPipelineCaps(dpy: VADisplay, context: VAContextID, filters: *mut VABufferID, num_filters: c_uint, pipeline_caps: *mut ProcPipelineCaps) -> VAStatus;
 }
 
 dylib! {

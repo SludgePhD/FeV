@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::RTFormat;
+use crate::surface::RTFormat;
 
 /// A FourCC code identifying a pixel format.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

@@ -5,9 +5,10 @@ use byteorder::{ReadBytesExt, BE};
 use jfifdump::SegmentKind;
 use softbuffer::GraphicsContext;
 use v_ayylmao::{
+    buffer::{Buffer, BufferType},
     jpeg,
     vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
-    BufferType, Display, Entrypoint, PixelFormat, Profile, SliceParameterBufferBase,
+    Config, Context, Display, Entrypoint, PixelFormat, Profile, SliceParameterBufferBase,
     SurfaceWithImage,
 };
 use winit::{
@@ -55,10 +56,10 @@ fn main() -> anyhow::Result<()> {
     let mut graphics_context = unsafe { GraphicsContext::new(&win, &win) }.unwrap();
 
     let display = Display::new(win.clone())?;
-    let config = display.create_default_config(Profile::JPEGBaseline, Entrypoint::VLD)?;
-    let mut jpeg_context = config.create_default_context(info.width.into(), info.height.into())?;
-    let config = display.create_default_config(Profile::None, Entrypoint::VideoProc)?;
-    let mut vpp_context = config.create_default_context(info.width.into(), info.height.into())?;
+    let config = Config::new(&display, Profile::JPEGBaseline, Entrypoint::VLD)?;
+    let mut jpeg_context = Context::new(&config, info.width.into(), info.height.into())?;
+    let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
+    let mut vpp_context = Context::new(&config, info.width.into(), info.height.into())?;
 
     let mut surface = SurfaceWithImage::new(
         &display,
@@ -194,12 +195,12 @@ fn main() -> anyhow::Result<()> {
         dhtbuf.set_huffman_table(index as _, table);
     }
 
-    let mut buf_dht = jpeg_context.create_param_buffer(BufferType::HuffmanTable, dhtbuf)?;
-    let mut buf_iq = jpeg_context.create_param_buffer(BufferType::IQMatrix, iqbuf)?;
-    let mut buf_pp = jpeg_context.create_param_buffer(BufferType::PictureParameter, ppbuf)?;
+    let mut buf_dht = Buffer::new_param(&jpeg_context, BufferType::HuffmanTable, dhtbuf)?;
+    let mut buf_iq = Buffer::new_param(&jpeg_context, BufferType::IQMatrix, iqbuf)?;
+    let mut buf_pp = Buffer::new_param(&jpeg_context, BufferType::PictureParameter, ppbuf)?;
     let mut buf_slice_param =
-        jpeg_context.create_param_buffer(BufferType::SliceParameter, slice_params)?;
-    let mut buf_slice_data = jpeg_context.create_data_buffer(BufferType::SliceData, &slice_data)?;
+        Buffer::new_param(&jpeg_context, BufferType::SliceParameter, slice_params)?;
+    let mut buf_slice_data = Buffer::new_data(&jpeg_context, BufferType::SliceData, &slice_data)?;
 
     let mut picture = jpeg_context.begin_picture(&mut surface)?;
     picture.render_picture(&mut buf_dht)?;
@@ -220,7 +221,7 @@ fn main() -> anyhow::Result<()> {
     pppbuf.set_output_color_properties(ColorProperties::new().with_color_range(SourceRange::FULL));
     pppbuf.set_output_color_standard(ColorStandardType::SRGB);
 
-    let mut pppbuf = vpp_context.create_param_buffer(BufferType::ProcPipelineParameter, pppbuf)?;
+    let mut pppbuf = Buffer::new_param(&vpp_context, BufferType::ProcPipelineParameter, pppbuf)?;
 
     let mut picture = vpp_context.begin_picture(&mut final_surface)?;
     picture.render_picture(&mut pppbuf)?;
@@ -232,7 +233,7 @@ fn main() -> anyhow::Result<()> {
 
     drop(pppbuf);
 
-    assert_eq!(final_surface.image().pixelformat(), PixelFormat::RGBA);
+    assert_eq!(final_surface.image().pixel_format(), PixelFormat::RGBA);
     let mapping = final_surface.map_sync()?;
     let decoded_data: Vec<_> = mapping
         .chunks(4)

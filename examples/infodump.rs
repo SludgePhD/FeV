@@ -1,6 +1,8 @@
 use std::error::Error;
 
-use v_ayylmao::{ConfigAttribType, Display, Entrypoint, Profile, RTFormat};
+use v_ayylmao::{
+    config::ConfigAttribType, surface::RTFormat, Config, Context, Display, Entrypoint, Profile,
+};
 use winit::{event_loop::EventLoop, window::Window};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -27,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         for entrypoint in display.query_entrypoints(profile)? {
             println!("  - Entrypoint {:?}", entrypoint);
 
-            let config = display.create_default_config(profile, entrypoint)?;
+            let config = Config::new(&display, profile, entrypoint)?;
             let attribs = config.query_config_attributes()?;
             println!("    {} config attributes", attribs.len());
             for attrib in attribs {
@@ -98,8 +100,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .query_entrypoints(Profile::None)?
             .contains(Entrypoint::VideoProc)
     {
-        let config = display.create_default_config(Profile::None, Entrypoint::VideoProc)?;
-        let context = config.create_default_context(512, 512)?;
+        let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
+        let context = Context::new(&config, 512, 512)?;
         let proc_filters = context.query_video_processing_filters()?;
         println!("{} supported video processing filters", proc_filters.len());
         for filter in proc_filters {

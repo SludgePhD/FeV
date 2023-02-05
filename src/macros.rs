@@ -15,6 +15,7 @@ macro_rules! ffi_enum {
         #[repr(transparent)]
         $v struct $name(pub(crate) $native);
 
+        #[allow(non_upper_case_globals)]
         impl $name {
             $(
                 $( #[$variant_attrs] )*

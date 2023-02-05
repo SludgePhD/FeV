@@ -1,83 +1,109 @@
-//! Buffer types specific to JPEG decoding and encoding.
+//! JPEG-related types and utilities.
 
 use std::mem;
 
-pub use crate::shared::jpeg::*;
+use bytemuck::{AnyBitPattern, Pod, Zeroable};
 
-use crate::{raw::jpeg, Mapping, Rotation, SliceParameterBufferBase};
+use crate::{
+    raw::{VA_PADDING_LOW, VA_PADDING_MEDIUM},
+    Mapping, Rotation, SliceParameterBufferBase,
+};
+
+ffi_enum! {
+    pub enum ColorSpace: u8 {
+        YUV = 0,
+        RGB = 1,
+        BGR = 2,
+    }
+}
 
 /// Stores up to 4 quantizer tables and remembers which ones have been modified and need reloading.
 #[derive(Clone, Copy)]
-#[repr(transparent)]
+#[repr(C)]
 pub struct IQMatrixBuffer {
-    raw: jpeg::IQMatrixBuffer,
+    load_quantiser_table: [u8; 4],
+    /// 4 quantization tables, indexed by the `Tqi` field of the color component.
+    quantiser_table: [[u8; 64]; 4],
+    va_reserved: [u32; VA_PADDING_LOW],
 }
 
 impl IQMatrixBuffer {
     pub fn new() -> Self {
-        Self {
-            raw: unsafe { std::mem::zeroed() },
-        }
+        unsafe { mem::zeroed() }
     }
 
     pub fn set_quantization_table(&mut self, index: u8, table_data: &[u8; 64]) {
         assert!(index <= 3, "index {index} out of bounds");
         let index = usize::from(index);
-        self.raw.load_quantiser_table[index] = 1;
-        self.raw.quantiser_table[index] = *table_data;
+        self.load_quantiser_table[index] = 1;
+        self.quantiser_table[index] = *table_data;
     }
 
     pub fn submit(&mut self, dest: &mut Mapping<'_, Self>) {
         dest.write(0, *self);
-        self.raw.load_quantiser_table = [0; 4];
+        self.load_quantiser_table = [0; 4];
     }
 }
 
 #[derive(Clone, Copy)]
-#[repr(transparent)]
+#[repr(C)]
 pub struct PictureParameterBuffer {
-    raw: jpeg::PictureParameterBuffer,
+    pub picture_width: u16,
+    pub picture_height: u16,
+    pub components: [Component; 255],
+    pub num_components: u8,
+    pub color_space: ColorSpace,
+    pub rotation: Rotation,
+    va_reserved: [u32; VA_PADDING_MEDIUM - 1],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct Component {
+    pub component_id: u8,
+    pub h_sampling_factor: u8,
+    pub v_sampling_factor: u8,
+    pub quantiser_table_selector: u8,
 }
 
 impl PictureParameterBuffer {
     pub fn new(picture_width: u16, picture_height: u16, color_space: ColorSpace) -> Self {
         unsafe {
-            let mut raw: jpeg::PictureParameterBuffer = mem::zeroed();
-            raw.picture_width = picture_width;
-            raw.picture_height = picture_height;
-            raw.color_space = color_space;
-            Self { raw }
+            let mut this: Self = mem::zeroed();
+            this.picture_width = picture_width;
+            this.picture_height = picture_height;
+            this.color_space = color_space;
+            this
         }
     }
 
     #[inline]
     pub fn picture_width(&self) -> u16 {
-        self.raw.picture_width
+        self.picture_width
     }
 
     #[inline]
     pub fn picture_height(&self) -> u16 {
-        self.raw.picture_height
+        self.picture_height
     }
 
     #[inline]
     pub fn set_rotation(&mut self, rotation: Rotation) {
-        self.raw.rotation = rotation;
+        self.rotation = rotation;
     }
 
     #[allow(non_snake_case)]
     pub fn push_component(&mut self, Ci: u8, Hi: u8, Vi: u8, Tqi: u8) {
-        let index = usize::from(self.raw.num_components);
-        self.raw.num_components = self
-            .raw
+        let index = usize::from(self.num_components);
+        self.num_components = self
             .num_components
             .checked_add(1)
             .expect("maximum number of frame components reached");
 
-        self.raw.components[index].component_id = Ci;
-        self.raw.components[index].h_sampling_factor = Hi;
-        self.raw.components[index].v_sampling_factor = Vi;
-        self.raw.components[index].quantiser_table_selector = Tqi;
+        self.components[index].component_id = Ci;
+        self.components[index].h_sampling_factor = Hi;
+        self.components[index].v_sampling_factor = Vi;
+        self.components[index].quantiser_table_selector = Tqi;
     }
 
     pub fn submit(&mut self, dest: &mut Mapping<'_, Self>) {
@@ -86,9 +112,28 @@ impl PictureParameterBuffer {
 }
 
 #[derive(Clone, Copy)]
-#[repr(transparent)]
+#[repr(C)]
 pub struct SliceParameterBuffer {
-    raw: jpeg::SliceParameterBuffer,
+    base: SliceParameterBufferBase,
+
+    slice_horizontal_position: u32,
+    slice_vertical_position: u32,
+
+    components: [ScanComponent; 4],
+    num_components: u8,
+
+    restart_interval: u16,
+    num_mcus: u32,
+
+    va_reserved: [u32; VA_PADDING_LOW],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct ScanComponent {
+    component_selector: u8,
+    dc_table_selector: u8,
+    ac_table_selector: u8,
 }
 
 impl SliceParameterBuffer {
@@ -102,40 +147,35 @@ impl SliceParameterBuffer {
     #[allow(non_snake_case)]
     pub fn new(base: SliceParameterBufferBase, Ri: u16, num_mcus: u32) -> Self {
         unsafe {
-            let mut raw: jpeg::SliceParameterBuffer = mem::zeroed();
-            raw.slice_data_size = base.slice_data_size();
-            raw.slice_data_offset = base.slice_data_offset();
-            raw.slice_data_flag = base.slice_data_flags();
-            raw.restart_interval = Ri;
-            raw.num_mcus = num_mcus;
-            Self { raw }
+            let mut this: Self = mem::zeroed();
+            this.base = base;
+            this.restart_interval = Ri;
+            this.num_mcus = num_mcus;
+            this
         }
     }
 
     #[allow(non_snake_case)]
     pub fn push_component(&mut self, Csj: u8, Tdj: u8, Taj: u8) {
-        let index = usize::from(self.raw.num_components);
-        self.raw.num_components = self
-            .raw
+        let index = usize::from(self.num_components);
+        self.num_components = self
             .num_components
             .checked_add(1)
             .expect("maximum number of scan components reached");
 
-        self.raw.components[index].component_selector = Csj;
-        self.raw.components[index].dc_table_selector = Tdj;
-        self.raw.components[index].ac_table_selector = Taj;
-    }
-
-    pub fn submit(&mut self, dest: &mut Mapping<'_, Self>) {
-        dest.write(0, *self);
+        self.components[index].component_selector = Csj;
+        self.components[index].dc_table_selector = Tdj;
+        self.components[index].ac_table_selector = Taj;
     }
 }
 
 /// Stores up to 2 [`HuffmanTable`]s and remembers which have been modified and need reloading.
-#[derive(Clone, Copy)]
-#[repr(transparent)]
+#[derive(Clone, Copy, AnyBitPattern)]
+#[repr(C)]
 pub struct HuffmanTableBuffer {
-    raw: jpeg::HuffmanTableBuffer,
+    load_huffman_table: [u8; 2],
+    huffman_table: [HuffmanTable; 2],
+    va_reserved: [u32; VA_PADDING_LOW],
 }
 
 impl HuffmanTableBuffer {
@@ -147,29 +187,29 @@ impl HuffmanTableBuffer {
     }
 
     pub fn zeroed() -> Self {
-        unsafe { Self { raw: mem::zeroed() } }
+        unsafe { mem::zeroed() }
     }
 
     pub fn set_huffman_table(&mut self, index: u8, tbl: &HuffmanTable) {
         assert!(index <= 1, "huffman table index {index} out of bounds");
         let index = usize::from(index);
-        self.raw.huffman_table[index] = tbl.raw;
-        self.raw.load_huffman_table[index] = 1; // mark as modified
+        self.huffman_table[index] = *tbl;
+        self.load_huffman_table[index] = 1; // mark as modified
     }
 
     pub fn clear_modified(&mut self) {
-        self.raw.load_huffman_table = [0; 2];
-    }
-
-    pub fn submit(&mut self, dest: &mut Mapping<'_, Self>) {
-        dest.write(0, *self);
-        self.raw.load_huffman_table = [0; 2];
+        self.load_huffman_table = [0; 2];
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
 pub struct HuffmanTable {
-    raw: jpeg::HuffmanTable,
+    num_dc_codes: [u8; 16],
+    dc_values: [u8; 12],
+    num_ac_codes: [u8; 16],
+    ac_values: [u8; 162],
+    pad: [u8; 2],
 }
 
 impl HuffmanTable {
@@ -248,7 +288,7 @@ impl HuffmanTable {
     }
 
     pub fn zeroed() -> Self {
-        unsafe { Self { raw: mem::zeroed() } }
+        unsafe { mem::zeroed() }
     }
 
     #[allow(non_snake_case)]
@@ -264,8 +304,8 @@ impl HuffmanTable {
             Vij.len(),
         );
 
-        self.raw.num_dc_codes[..Li.len()].copy_from_slice(Li);
-        self.raw.dc_values[..Vij.len()].copy_from_slice(Vij);
+        self.num_dc_codes[..Li.len()].copy_from_slice(Li);
+        self.dc_values[..Vij.len()].copy_from_slice(Vij);
     }
 
     #[allow(non_snake_case)]
@@ -281,7 +321,7 @@ impl HuffmanTable {
             Vij.len(),
         );
 
-        self.raw.num_ac_codes[..Li.len()].copy_from_slice(Li);
-        self.raw.ac_values[..Vij.len()].copy_from_slice(Vij);
+        self.num_ac_codes[..Li.len()].copy_from_slice(Li);
+        self.ac_values[..Vij.len()].copy_from_slice(Vij);
     }
 }

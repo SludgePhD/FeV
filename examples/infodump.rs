@@ -87,6 +87,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
+    let formats = display.query_subpicture_format()?;
+    println!("{} supported subpicture formats", formats.len());
+    for format in formats {
+        let img = format.image_format();
+        println!(
+            "- {} {:?}, {} bpp, depth={}, Rm={:#010x}, Gm={:#010x}, Bm={:#010x}, Am={:#010x}",
+            img.pixel_format(),
+            img.byte_order(),
+            img.bits_per_pixel(),
+            img.depth(),
+            img.red_mask(),
+            img.green_mask(),
+            img.blue_mask(),
+            img.alpha_mask(),
+        );
+        println!("  {:?}", format.flags());
+    }
+
     let display_attributes = display.query_display_attributes()?;
     println!("{} supported display attributes", display_attributes.len());
     for attrib in display_attributes {

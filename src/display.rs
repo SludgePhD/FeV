@@ -16,6 +16,7 @@ use crate::{
     dlopen::{libva, libva_drm, libva_wayland, libva_x11},
     image::ImageFormats,
     raw::{VADisplay, VA_PADDING_LOW},
+    subpicture::{SubpictureFlags, SubpictureFormats},
     Entrypoints, Error, Profile, Profiles, Result,
 };
 
@@ -320,6 +321,25 @@ impl Display {
             )?;
             formats.set_len(num as usize);
             Ok(ImageFormats { vec: formats })
+        }
+    }
+
+    pub fn query_subpicture_format(&self) -> Result<SubpictureFormats> {
+        unsafe {
+            let max = self.d.libva.vaMaxNumSubpictureFormats(self.d.raw) as usize;
+            let mut formats = Vec::with_capacity(max);
+            let mut flags: Vec<SubpictureFlags> = Vec::with_capacity(max);
+            let mut num = 0;
+            check(self.d.libva.vaQuerySubpictureFormats(
+                self.d.raw,
+                formats.as_mut_ptr(),
+                flags.as_mut_ptr().cast(),
+                &mut num,
+            ))?;
+            formats.set_len(num as usize);
+            flags.set_len(num as usize);
+
+            Ok(SubpictureFormats { formats, flags })
         }
     }
 

@@ -85,8 +85,8 @@ const fn f(fourcc: &[u8; 4]) -> PixelFormat {
 
 impl fmt::Display for PixelFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let [a, b, c, d] = self.0.to_le_bytes();
-        let [a, b, c, d] = [a as char, b as char, c as char, d as char];
+        let bytes = self.0.to_le_bytes();
+        let [a, b, c, d] = bytes.map(|b| (b as char).escape_default());
         write!(f, "{}{}{}{}", a, b, c, d)
     }
 }

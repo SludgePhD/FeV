@@ -4,7 +4,7 @@
 //! and [`Entrypoint::VideoProc`][crate::Entrypoint::VideoProc], and submit a
 //! [`ProcPipelineParameterBuffer`].
 
-use std::{ffi::c_uint, marker::PhantomData, mem, vec};
+use std::{ffi::c_uint, marker::PhantomData, mem, slice, vec};
 
 use crate::{
     buffer::{Buffer, RawBuffer},
@@ -73,6 +73,32 @@ impl Context {
                 filters.len().try_into().unwrap(),
                 &mut caps,
             ))?;
+
+            // Intel's and Mesa's implementation doesn't use the user-provided buffers, but changes
+            // the pointer to point to static data, despite the `va_vpp.h` docs implying otherwise.
+            // Support both by copying to our buffer.
+            let num_in_color_stds = caps.num_input_color_standards as usize;
+            let num_out_color_stds = caps.num_output_color_standards as usize;
+            if caps.input_color_standards != input_color_standards.as_mut_ptr() {
+                input_color_standards[..num_in_color_stds].copy_from_slice(slice::from_raw_parts(
+                    caps.input_color_standards,
+                    num_in_color_stds,
+                ));
+            }
+            if caps.output_color_standards != output_color_standards.as_mut_ptr() {
+                output_color_standards[..num_out_color_stds].copy_from_slice(
+                    slice::from_raw_parts(caps.output_color_standards, num_out_color_stds),
+                );
+            }
+
+            // Aaaand of course nobody actually supports the pixel format part of the interface.
+            // So when the number is unchanged, assume the data is too, and clear it.
+            if caps.num_input_pixel_formats == input_pixel_formats.len() as _ {
+                input_pixel_formats.clear();
+            }
+            if caps.num_output_pixel_formats == output_pixel_formats.len() as _ {
+                output_pixel_formats.clear();
+            }
 
             input_color_standards.truncate(caps.num_input_color_standards as _);
             output_color_standards.truncate(caps.num_output_color_standards as _);

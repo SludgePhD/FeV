@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 license = "0BSD"
 description = "High-level VA-API bindings"
+repository = "https://github.com/SludgePhD/v-ayylmao"
 keywords = ["libva", "video", "decode", "codec", "acceleration"]
 
 [dependencies]

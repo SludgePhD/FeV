@@ -1,5 +1,10 @@
 //! JPEG-related types and utilities.
 
+pub mod parser;
+
+#[cfg(test)]
+mod tests;
+
 use std::mem;
 
 use bytemuck::{AnyBitPattern, Pod, Zeroable};
@@ -92,6 +97,14 @@ impl PictureParameterBuffer {
         self.rotation = rotation;
     }
 
+    /// Adds a frame component.
+    ///
+    /// # Parameters
+    ///
+    /// - `Ci`: component identifier.
+    /// - `Hi`: horizontal sampling factor.
+    /// - `Vi`: vertical sampling factor.
+    /// - `Tqi`: quantization table destination selector.
     #[allow(non_snake_case)]
     pub fn push_component(&mut self, Ci: u8, Hi: u8, Vi: u8, Tqi: u8) {
         let index = usize::from(self.num_components);

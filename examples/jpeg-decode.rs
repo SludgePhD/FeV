@@ -1,15 +1,13 @@
 use std::{cmp, rc::Rc, time::Instant};
 
 use anyhow::{anyhow, bail};
-use byteorder::{ReadBytesExt, BE};
-use jfifdump::SegmentKind;
 use softbuffer::GraphicsContext;
 use v_ayylmao::{
     buffer::{Buffer, BufferType},
     config::Config,
     context::Context,
     display::Display,
-    jpeg,
+    jpeg::{self, parser::SofMarker},
     surface::SurfaceWithImage,
     vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
     Entrypoint, PixelFormat, Profile, SliceParameterBufferBase,
@@ -80,11 +78,10 @@ fn main() -> anyhow::Result<()> {
     log::debug!("intermediate image = {:?}", surface.image());
     log::debug!("final image = {:?}", final_surface.image());
 
-    let eoi;
     let mut max_h_factor = 0;
     let mut max_v_factor = 0;
     let mut ppbuf = None;
-    let mut scan = None;
+    let mut slice = None;
     let mut iqbuf = jpeg::IQMatrixBuffer::new();
     let mut tbls = [
         jpeg::HuffmanTable::default_luminance(),
@@ -92,106 +89,83 @@ fn main() -> anyhow::Result<()> {
     ];
     let mut restart_interval = 0;
 
-    let mut read = &*jpeg;
-    let mut jfif = jfifdump::Reader::new(&mut read)?;
-    loop {
-        let segment = jfif.next_segment()?;
+    let mut parser = jpeg::parser::JpegParser::new(&jpeg);
+    while let Some(segment) = parser.next_segment()? {
         match segment.kind {
-            SegmentKind::Dri(ri) => {
-                restart_interval = ri;
-            }
-            SegmentKind::Dqt(dqts) => {
-                for dqt in dqts {
-                    iqbuf.set_quantization_table(dqt.dest, &dqt.values);
+            jpeg::parser::SegmentKind::Dqt(dqt) => {
+                for dqt in dqt.tables() {
+                    if dqt.Pq() != 0 {
+                        bail!("unexpected value `{}` for DQT Pq", dqt.Pq());
+                    }
+                    iqbuf.set_quantization_table(dqt.Tq(), &dqt.Qk());
                 }
             }
-            SegmentKind::Dht(dhts) => {
-                for dht in dhts {
-                    let tbl = tbls.get_mut(usize::from(dht.dest)).ok_or_else(|| {
+            jpeg::parser::SegmentKind::Dht(dht) => {
+                for table in dht.tables() {
+                    let tbl = tbls.get_mut(usize::from(table.Th())).ok_or_else(|| {
                         anyhow!(
                             "invalid DHT destination slot {} (expected 0 or 1)",
-                            dht.dest
+                            table.Th()
                         )
                     })?;
-                    match dht.class {
-                        0 => tbl.set_dc_table(&dht.code_lengths, &dht.values),
-                        1 => tbl.set_ac_table(&dht.code_lengths, &dht.values),
-                        _ => bail!("invalid DHT class {}", dht.class),
+                    match table.Tc() {
+                        0 => tbl.set_dc_table(table.Li(), table.Vij()),
+                        1 => tbl.set_ac_table(table.Li(), table.Vij()),
+                        _ => bail!("invalid DHT class {}", table.Tc()),
                     }
                 }
             }
-            SegmentKind::Frame(frame) => {
-                if frame.sof != 0xC0 {
-                    bail!(
-                        "not a baseline JPEG (SOF={:02x}, {})",
-                        frame.sof,
-                        frame.get_sof_name()
-                    );
+            jpeg::parser::SegmentKind::Dri(dri) => restart_interval = dri.Ri(),
+            jpeg::parser::SegmentKind::Sof(sof) => {
+                if sof.sof() != SofMarker::SOF0 {
+                    bail!("not a baseline JPEG (SOF={:?})", sof.sof());
                 }
-                let mut buf = jpeg::PictureParameterBuffer::new(
-                    frame.dimension_x,
-                    frame.dimension_y,
-                    jpeg::ColorSpace::YUV,
-                );
-                for component in &frame.components {
+
+                if sof.P() != 8 {
+                    bail!("sample precision {} bits is not supported", sof.P());
+                }
+
+                let mut buf =
+                    jpeg::PictureParameterBuffer::new(sof.X(), sof.Y(), jpeg::ColorSpace::YUV);
+                for component in sof.components() {
                     buf.push_component(
-                        component.id,
-                        component.horizontal_sampling_factor,
-                        component.vertical_sampling_factor,
-                        component.quantization_table,
+                        component.Ci(),
+                        component.Hi(),
+                        component.Vi(),
+                        component.Tqi(),
                     );
-                    max_h_factor = cmp::max(
-                        u32::from(component.horizontal_sampling_factor),
-                        max_h_factor,
-                    );
-                    max_v_factor =
-                        cmp::max(u32::from(component.vertical_sampling_factor), max_v_factor);
+                    max_h_factor = cmp::max(u32::from(component.Hi()), max_h_factor);
+                    max_v_factor = cmp::max(u32::from(component.Vi()), max_v_factor);
                 }
                 ppbuf = Some(buf);
             }
-            SegmentKind::Scan(s) => {
-                // `segment.position` is *after* the segment's marker for some reason
-                scan = Some((segment.position - 2, s));
+            jpeg::parser::SegmentKind::Sos(sos) => {
+                let Some(ppbuf) = &ppbuf else { continue };
+                let slice_data = sos.data();
+                let width = u32::from(ppbuf.picture_width());
+                let height = u32::from(ppbuf.picture_height());
+                let num_mcus = ((width + max_h_factor * 8 - 1) / (max_h_factor * 8))
+                    * ((height + max_v_factor * 8 - 1) / (max_v_factor * 8));
+                let mut slice_params = jpeg::SliceParameterBuffer::new(
+                    SliceParameterBufferBase::new(slice_data.len().try_into().unwrap()),
+                    restart_interval,
+                    num_mcus,
+                );
+                for component in sos.components() {
+                    slice_params.push_component(component.Csj(), component.Tdj(), component.Taj());
+                }
+                slice = Some((slice_params, slice_data));
             }
-            SegmentKind::Eoi => {
-                eoi = segment.position;
-                break;
-            }
-            SegmentKind::Unknown { marker, .. } => {
-                log::warn!("unknown segment marker: {:#04x}", marker);
-            }
-            SegmentKind::Dac(_)
-            | SegmentKind::Rst(_)
-            | SegmentKind::Comment(_)
-            | SegmentKind::App { .. }
-            | SegmentKind::App0Jfif(_) => {}
+            jpeg::parser::SegmentKind::Eoi => break,
+            _ => {}
         }
     }
 
     let Some(ppbuf) = ppbuf else { bail!("file is missing SOI segment") };
-    let Some((sos_pos, scan)) = scan else { bail!("missing SOS segment") };
-
-    // NB: the slice data starts at the *data* contained in the SOS segment, and continues until
-    // the byte just before the EOI segment.
-
-    let mut sos = &jpeg[sos_pos..];
-    assert_eq!(sos.read_u16::<BE>()?, 0xFFDA);
-    let sos_len = usize::from(sos.read_u16::<BE>()?);
-    // `Ls` field counts its own bytes, but not the preceding marker.
-    let slice_data = &jpeg[sos_pos + sos_len + 2..eoi];
+    let Some((slice_params, slice_data)) = slice else { bail!("file is missing SOS header") };
 
     let width = u32::from(ppbuf.picture_width());
     let height = u32::from(ppbuf.picture_height());
-    let num_mcus = ((width + max_h_factor * 8 - 1) / (max_h_factor * 8))
-        * ((height + max_v_factor * 8 - 1) / (max_v_factor * 8));
-    let mut slice_params = jpeg::SliceParameterBuffer::new(
-        SliceParameterBufferBase::new(slice_data.len().try_into().unwrap()),
-        restart_interval,
-        num_mcus,
-    );
-    for component in &scan.components {
-        slice_params.push_component(component.id, component.dc_table, component.ac_table);
-    }
 
     let mut dhtbuf = jpeg::HuffmanTableBuffer::zeroed();
     for (index, table) in tbls.iter().enumerate() {

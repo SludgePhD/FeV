@@ -318,15 +318,15 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn new(display: &Display, format: RTFormat, width: u32, height: u32) -> Result<Self> {
-        Self::with_attribs(display, format, width, height, &mut [])
+    pub fn new(display: &Display, width: u32, height: u32, format: RTFormat) -> Result<Self> {
+        Self::with_attribs(display, width, height, format, &mut [])
     }
 
     pub fn with_attribs(
         display: &Display,
-        format: RTFormat,
         width: u32,
         height: u32,
+        format: RTFormat,
         attribs: &mut [SurfaceAttrib],
     ) -> Result<Self> {
         let mut id = 0;
@@ -461,9 +461,9 @@ impl SurfaceWithImage {
 
         let mut surface = Surface::with_attribs(
             &display,
-            rtformat,
             width,
             height,
+            rtformat,
             &mut [SurfaceAttribEnum::PixelFormat(format).into()],
         )?;
 

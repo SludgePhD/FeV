@@ -8,7 +8,7 @@ use v_ayylmao::{
     context::Context,
     display::Display,
     jpeg::{self, parser::SofMarker},
-    surface::SurfaceWithImage,
+    surface::{Surface, SurfaceWithImage},
     vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
     Entrypoint, PixelFormat, Profile, SliceParameterBufferBase,
 };
@@ -62,11 +62,11 @@ fn main() -> anyhow::Result<()> {
     let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
     let mut vpp_context = Context::new(&config, info.width.into(), info.height.into())?;
 
-    let mut surface = SurfaceWithImage::new(
+    let mut surface = Surface::new(
         &display,
         info.width.into(),
         info.height.into(),
-        PixelFormat::NV12,
+        PixelFormat::NV12.to_rtformat().unwrap(),
     )?;
     let mut final_surface = SurfaceWithImage::new(
         &display,
@@ -75,8 +75,7 @@ fn main() -> anyhow::Result<()> {
         PixelFormat::RGBA,
     )?;
 
-    log::debug!("intermediate image = {:?}", surface.image());
-    log::debug!("final image = {:?}", final_surface.image());
+    log::debug!("image format = {:?}", final_surface.image());
 
     let mut max_h_factor = 0;
     let mut max_v_factor = 0;

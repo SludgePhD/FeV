@@ -216,7 +216,7 @@ fn main() -> anyhow::Result<()> {
         .chunks(4)
         .take(width as usize * height as usize) // ignore trailing padding bytes
         .map(|pix| {
-            let [b, g, r, _a] = [pix[0], pix[1], pix[2], pix[3]].map(u32::from);
+            let [r, g, b, _a] = [pix[0], pix[1], pix[2], pix[3]].map(u32::from);
             r << 16 | g << 8 | b
         })
         .collect();

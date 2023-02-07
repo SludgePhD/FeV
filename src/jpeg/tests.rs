@@ -28,7 +28,12 @@ fn do_reftests() -> Result<(), Box<dyn Error>> {
         let path = entry.path();
         let stem = path.file_stem().unwrap().to_str().unwrap();
         let ext = path.extension().unwrap().to_str().unwrap();
-        if ext == "jpg" && entry.file_type()?.is_file() {
+        if ext == "log" {
+            continue;
+        }
+        assert_eq!(ext, "jpg", "file '{}' has invalid suffix", path.display());
+
+        if entry.file_type()?.is_file() {
             let log = format!("test-images/{stem}.log");
             check(&format!("{stem}.{ext}"), expect_file![log]);
         }

@@ -105,6 +105,12 @@ impl From<String> for Repr {
     }
 }
 
+impl<'a> From<&'a str> for Repr {
+    fn from(value: &'a str) -> Self {
+        Self::Other(value.into())
+    }
+}
+
 impl From<Utf8Error> for Repr {
     fn from(v: Utf8Error) -> Self {
         Self::Utf8Error(v)

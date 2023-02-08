@@ -1,18 +1,27 @@
 //! JPEG-related types and utilities.
 
-pub mod parser;
+mod parser;
 
 #[cfg(test)]
 mod tests;
 
-use std::mem;
+use std::{cmp, mem};
 
 use bytemuck::{AnyBitPattern, Pod, Zeroable};
 
 use crate::{
+    buffer::{Buffer, BufferType, Mapping},
+    config::Config,
+    context::Context,
+    display::Display,
+    error::Error,
     raw::{VA_PADDING_LOW, VA_PADDING_MEDIUM},
-    Mapping, Rotation, SliceParameterBufferBase,
+    surface::{Surface, SurfaceWithImage},
+    vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
+    Entrypoint, PixelFormat, Profile, Result, Rotation, SliceParameterBufferBase,
 };
+
+use self::parser::{JpegParser, SegmentKind, SofMarker};
 
 ffi_enum! {
     pub enum ColorSpace: u8 {
@@ -42,11 +51,6 @@ impl IQMatrixBuffer {
         let index = usize::from(index);
         self.load_quantiser_table[index] = 1;
         self.quantiser_table[index] = *table_data;
-    }
-
-    pub fn submit(&mut self, dest: &mut Mapping<'_, Self>) {
-        dest.write(0, *self);
-        self.load_quantiser_table = [0; 4];
     }
 }
 
@@ -117,10 +121,6 @@ impl PictureParameterBuffer {
         self.components[index].h_sampling_factor = Hi;
         self.components[index].v_sampling_factor = Vi;
         self.components[index].quantiser_table_selector = Tqi;
-    }
-
-    pub fn submit(&mut self, dest: &mut Mapping<'_, Self>) {
-        dest.write(0, *self);
     }
 }
 
@@ -208,6 +208,13 @@ impl HuffmanTableBuffer {
         let index = usize::from(index);
         self.huffman_table[index] = *tbl;
         self.load_huffman_table[index] = 1; // mark as modified
+    }
+
+    pub fn huffman_table_mut(&mut self, index: u8) -> &mut HuffmanTable {
+        assert!(index <= 1, "huffman table index {index} out of bounds");
+        let index = usize::from(index);
+        self.load_huffman_table[index] = 1; // mark as modified
+        &mut self.huffman_table[index]
     }
 
     pub fn clear_modified(&mut self) {
@@ -336,5 +343,298 @@ impl HuffmanTable {
 
         self.num_ac_codes[..Li.len()].copy_from_slice(Li);
         self.ac_values[..Vij.len()].copy_from_slice(Vij);
+    }
+}
+
+/// JPEG metadata required to create a VA-API JPEG decoding session.
+#[derive(Debug)]
+pub struct JpegInfo {
+    width: u16,
+    height: u16,
+}
+
+impl JpegInfo {
+    /// Parses the given JPEG image.
+    ///
+    /// # Errors
+    ///
+    /// If this returns an error, the JPEG image is either malformed, or of an incompatible format
+    /// that is not supported by VA-API. In that case, the caller should fall back to software
+    /// decoding.
+    pub fn new(jpeg: &[u8]) -> Result<Self> {
+        let mut parser = JpegParser::new(&jpeg);
+        let segment = parser
+            .next_segment()?
+            .ok_or_else(|| Error::from("missing SOI segment"))?;
+        if !matches!(segment.kind, parser::SegmentKind::Soi) {
+            return Err(Error::from("missing SOI segment"));
+        }
+
+        let sof = loop {
+            let segment = parser
+                .next_segment()?
+                .ok_or_else(|| Error::from("missing SOF segment"))?;
+            match segment.kind {
+                SegmentKind::Sof(sof) => break sof,
+                _ => {}
+            }
+        };
+
+        if sof.sof() != SofMarker::SOF0 {
+            return Err(Error::from(format!(
+                "not a baseline JPEG ({:?})",
+                sof.sof()
+            )));
+        }
+        if sof.P() != 8 {
+            return Err(Error::from(format!(
+                "unsupported sample precision of {} bits (only 8-bit samples are supported)",
+                sof.P()
+            )));
+        }
+
+        Ok(Self {
+            width: sof.X(),
+            height: sof.Y(),
+        })
+    }
+
+    #[inline]
+    pub fn width(&self) -> u16 {
+        self.width
+    }
+
+    #[inline]
+    pub fn height(&self) -> u16 {
+        self.height
+    }
+}
+
+/// A VA-API JPEG decoding session.
+///
+/// This type encapsulates [`Surface`]s and [`Context`]s for decoding baseline JPEG files of a
+/// particular size. It will also convert the JPEG to standard sRGB color space.
+pub struct JpegDecodeSession {
+    width: u32,
+    height: u32,
+
+    jpeg_surface: Surface,
+    vpp_surface: SurfaceWithImage,
+
+    jpeg_context: Context,
+    vpp_context: Context,
+}
+
+impl JpegDecodeSession {
+    /// Creates [`Surface`]s and [`Context`]s to decode JPEG images of the given size.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if VA-API object creation fails. This typically means
+    /// that the implementation does not support JPEG decoding, but it can also indicate that the
+    /// JPEG is simply too large and smaller ones would work.
+    pub fn new(display: &Display, width: u16, height: u16) -> Result<Self> {
+        // The AMD/Mesa impl has all sorts of incorrect behavior and does not support color space
+        // conversion, and Intel is the only other hardware I have at hand and can test with, so
+        // limit to that for now.
+        let vendor = &display.query_vendor_string()?;
+        if !vendor.contains("Intel") {
+            return Err(Error::from(format!(
+                "JPEG decode: unsupported vendor '{vendor}' (currently, only Intel is supported)"
+            )));
+        }
+
+        let width = u32::from(width);
+        let height = u32::from(height);
+
+        let config = Config::new(&display, Profile::JPEGBaseline, Entrypoint::VLD)?;
+        let jpeg_context = Context::new(&config, width, height)?;
+        let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
+        let vpp_context = Context::new(&config, width, height)?;
+
+        let jpeg_surface = Surface::new(
+            &display,
+            width,
+            height,
+            PixelFormat::NV12.to_rtformat().unwrap(),
+        )?;
+        let vpp_surface = SurfaceWithImage::new(&display, width, height, PixelFormat::RGBA)?;
+
+        log::debug!("image format = {:?}", vpp_surface.image());
+
+        Ok(Self {
+            width,
+            height,
+            jpeg_surface,
+            vpp_surface,
+            jpeg_context,
+            vpp_context,
+        })
+    }
+
+    /// Decodes a baseline JPEG, returning a [`Mapping`] containing the decoded image.
+    ///
+    /// The decoded image data is in **RGBA** order and sRGB color space.
+    ///
+    /// # Errors
+    ///
+    /// This method returns an error when the JPEG is malformed or VA-API returns an error during
+    /// decoding.
+    pub fn decode(&mut self, jpeg: &[u8]) -> Result<Mapping<'_, u8>> {
+        // TODO make this more flexible and move to `error` module
+        macro_rules! bail {
+            ($($args:tt)*) => {
+                return Err(Error::from(format!(
+                    $($args)*
+                )))
+            };
+        }
+
+        let mut dhtbuf = HuffmanTableBuffer::zeroed();
+        let mut max_h_factor = 0;
+        let mut max_v_factor = 0;
+        let mut restart_interval = 0;
+        let mut ppbuf = None;
+        let mut slice = None;
+        let mut iqbuf = IQMatrixBuffer::new();
+
+        let mut parser = JpegParser::new(&jpeg);
+        while let Some(segment) = parser.next_segment()? {
+            match segment.kind {
+                SegmentKind::Dqt(dqt) => {
+                    for dqt in dqt.tables() {
+                        if dqt.Pq() != 0 {
+                            bail!("unexpected value `{}` for DQT Pq", dqt.Pq());
+                        }
+                        iqbuf.set_quantization_table(dqt.Tq(), &dqt.Qk());
+                    }
+                }
+                SegmentKind::Dht(dht) => {
+                    for table in dht.tables() {
+                        if table.Th() > 1 {
+                            bail!(
+                                "invalid DHT destination slot {} (expected 0 or 1)",
+                                table.Th()
+                            );
+                        }
+                        let tbl = dhtbuf.huffman_table_mut(table.Th());
+                        match table.Tc() {
+                            0 => tbl.set_dc_table(table.Li(), table.Vij()),
+                            1 => tbl.set_ac_table(table.Li(), table.Vij()),
+                            _ => bail!("invalid DHT class {}", table.Tc()),
+                        }
+                    }
+                }
+                SegmentKind::Dri(dri) => restart_interval = dri.Ri(),
+                SegmentKind::Sof(sof) => {
+                    if sof.sof() != SofMarker::SOF0 {
+                        bail!("not a baseline JPEG (SOF={:?})", sof.sof());
+                    }
+
+                    if sof.P() != 8 {
+                        bail!("sample precision of {} bits is not supported", sof.P());
+                    }
+
+                    if u32::from(sof.Y()) != self.height || u32::from(sof.X()) != self.width {
+                        bail!(
+                            "image dimension {}x{} does not match context dimention {}x{}",
+                            sof.X(),
+                            sof.Y(),
+                            self.width,
+                            self.height
+                        );
+                    }
+
+                    let mut buf = PictureParameterBuffer::new(sof.X(), sof.Y(), ColorSpace::YUV);
+                    for component in sof.components() {
+                        buf.push_component(
+                            component.Ci(),
+                            component.Hi(),
+                            component.Vi(),
+                            component.Tqi(),
+                        );
+                        max_h_factor = cmp::max(u32::from(component.Hi()), max_h_factor);
+                        max_v_factor = cmp::max(u32::from(component.Vi()), max_v_factor);
+                    }
+                    ppbuf = Some(buf);
+                }
+                SegmentKind::Sos(sos) => {
+                    if sos.Ss() != 0 || sos.Se() != 63 {
+                        // Baseline JPEGs always use 0...63
+                        bail!(
+                            "invalid SOS header: Ss={}, Se={} (expected 0...63)",
+                            sos.Ss(),
+                            sos.Se(),
+                        );
+                    }
+
+                    if sos.Ah() != 0 || sos.Al() != 0 {
+                        // Baseline JPEGs always use 0...0
+                        bail!("invalid SOS header: Ah={}, Al={}", sos.Ah(), sos.Al());
+                    }
+
+                    let slice_data = sos.data();
+                    let num_mcus = ((self.width + max_h_factor * 8 - 1) / (max_h_factor * 8))
+                        * ((self.height + max_v_factor * 8 - 1) / (max_v_factor * 8));
+                    let mut slice_params = SliceParameterBuffer::new(
+                        SliceParameterBufferBase::new(slice_data.len().try_into().unwrap()),
+                        restart_interval,
+                        num_mcus,
+                    );
+                    for component in sos.components() {
+                        slice_params.push_component(
+                            component.Csj(),
+                            component.Tdj(),
+                            component.Taj(),
+                        );
+                    }
+                    slice = Some((slice_params, slice_data));
+                }
+                SegmentKind::Eoi => break,
+                _ => {}
+            }
+        }
+
+        let Some(ppbuf) = ppbuf else { bail!("file is missing SOI segment") };
+        let Some((slice_params, slice_data)) = slice else { bail!("file is missing SOS header") };
+
+        let mut buf_dht = Buffer::new_param(&self.jpeg_context, BufferType::HuffmanTable, dhtbuf)?;
+        let mut buf_iq = Buffer::new_param(&self.jpeg_context, BufferType::IQMatrix, iqbuf)?;
+        let mut buf_pp =
+            Buffer::new_param(&self.jpeg_context, BufferType::PictureParameter, ppbuf)?;
+        let mut buf_slice_param =
+            Buffer::new_param(&self.jpeg_context, BufferType::SliceParameter, slice_params)?;
+        let mut buf_slice_data =
+            Buffer::new_data(&self.jpeg_context, BufferType::SliceData, &slice_data)?;
+
+        let mut picture = self.jpeg_context.begin_picture(&mut self.jpeg_surface)?;
+        picture.render_picture(&mut buf_dht)?;
+        picture.render_picture(&mut buf_iq)?;
+        picture.render_picture(&mut buf_pp)?;
+        picture.render_picture(&mut buf_slice_param)?;
+        picture.render_picture(&mut buf_slice_data)?;
+        unsafe { picture.end_picture()? }
+
+        let mut pppbuf = ProcPipelineParameterBuffer::new(&self.jpeg_surface);
+        // The input color space is the JPEG color space
+        let input_props = ColorProperties::new().with_color_range(SourceRange::FULL);
+        pppbuf.set_input_color_properties(input_props);
+        pppbuf.set_input_color_standard(ColorStandardType::BT601);
+        // The output color space is 8-bit non-linear sRGB
+        let output_props = ColorProperties::new().with_color_range(SourceRange::FULL);
+        pppbuf.set_output_color_properties(output_props);
+        pppbuf.set_output_color_standard(ColorStandardType::SRGB);
+
+        let mut pppbuf =
+            Buffer::new_param(&self.vpp_context, BufferType::ProcPipelineParameter, pppbuf)?;
+
+        let mut picture = self.vpp_context.begin_picture(&mut self.vpp_surface)?;
+        picture.render_picture(&mut pppbuf)?;
+        unsafe { picture.end_picture()? }
+        log::debug!("submitted VPP op");
+
+        drop(pppbuf);
+
+        self.vpp_surface.map_sync()
     }
 }

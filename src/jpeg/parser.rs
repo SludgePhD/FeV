@@ -413,16 +413,19 @@ impl<'a> Sof<'a> {
         self.sof
     }
 
+    /// Returns the sample precision in bits.
     #[inline]
     pub fn P(&self) -> u8 {
         self.P
     }
 
+    /// Returns the number of lines in the image (the height of the frame).
     #[inline]
     pub fn Y(&self) -> u16 {
         self.Y
     }
 
+    /// Returns the number of samples per line (the width of the frame).
     #[inline]
     pub fn X(&self) -> u16 {
         self.X

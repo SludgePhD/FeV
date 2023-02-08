@@ -23,7 +23,6 @@ pub use pixelformat::PixelFormat;
 
 use std::{ffi::c_int, vec};
 
-use buffer::Mapping;
 use error::{Error, VAError, VAStatus};
 
 type Result<T, E = Error> = std::result::Result<T, E>;

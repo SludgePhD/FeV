@@ -347,7 +347,7 @@ impl HuffmanTable {
 }
 
 /// JPEG metadata required to create a VA-API JPEG decoding session.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct JpegInfo {
     width: u16,
     height: u16,

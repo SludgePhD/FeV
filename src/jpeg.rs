@@ -434,16 +434,6 @@ impl JpegDecodeSession {
     /// that the implementation does not support JPEG decoding, but it can also indicate that the
     /// JPEG is simply too large and smaller ones would work.
     pub fn new(display: &Display, width: u16, height: u16) -> Result<Self> {
-        // The AMD/Mesa impl has all sorts of incorrect behavior and does not support color space
-        // conversion, and Intel is the only other hardware I have at hand and can test with, so
-        // limit to that for now.
-        let vendor = &display.query_vendor_string()?;
-        if !vendor.contains("Intel") {
-            return Err(Error::from(format!(
-                "JPEG decode: unsupported vendor '{vendor}' (currently, only Intel is supported)"
-            )));
-        }
-
         let width = u32::from(width);
         let height = u32::from(height);
 

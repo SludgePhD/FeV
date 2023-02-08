@@ -140,6 +140,10 @@ pub(crate) struct DisplayOwner {
     display_handle_owner: Option<Box<dyn HasRawDisplayHandle>>,
 }
 
+// Safety: VA-API clearly and unambiguously documents that it is thread-safe.
+unsafe impl Send for DisplayOwner {}
+unsafe impl Sync for DisplayOwner {}
+
 impl fmt::Debug for DisplayOwner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DisplayOwner")

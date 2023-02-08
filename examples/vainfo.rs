@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use v_ayylmao::display::Display;
-use winit::{event_loop::EventLoop, window::Window};
+use winit::event_loop::EventLoop;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::builder()
@@ -9,9 +9,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     let ev = EventLoop::new();
-    let win = Window::new(&ev)?;
 
-    let display = Display::new(win)?;
+    // Safety: `ev` is dropped after the `display` and all derived resources are dropped.
+    // FIXME: use the safe API once winit implements `HasRawDisplayHandle` for `EventLoop`.
+    let display = unsafe { Display::new_unmanaged(&*ev)? };
     println!(
         "API Version: {}.{}",
         display.version_major(),

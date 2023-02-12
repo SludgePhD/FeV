@@ -54,9 +54,25 @@ fn main() -> anyhow::Result<()> {
 
     let jpeg_info = JpegInfo::new(&jpeg)?;
     let mut context = JpegDecodeSession::new(&display, jpeg_info.width(), jpeg_info.height())?;
+    for _ in 0..20 {
+        let mapping = context.decode(&jpeg)?;
+        let start = Instant::now();
+        let _data = mapping.to_vec();
+        log::trace!("copy from VABuffer took {:?}", start.elapsed());
+    }
     let mapping = context.decode(&jpeg)?;
 
-    let decoded_data: Vec<_> = mapping
+    log::debug!("{} byte output", mapping.len());
+
+    let start = Instant::now();
+    let data = mapping.to_vec();
+    log::trace!("copy from VABuffer took {:?}", start.elapsed());
+    let start = Instant::now();
+    let data = data.to_vec();
+    log::trace!("vec copy took {:?}", start.elapsed());
+
+    let start = Instant::now();
+    let decoded_data: Vec<_> = data
         .chunks(4)
         .take(jpeg_info.width() as usize * jpeg_info.height() as usize) // ignore trailing padding bytes
         .map(|pix| {
@@ -64,6 +80,7 @@ fn main() -> anyhow::Result<()> {
             r << 16 | g << 8 | b
         })
         .collect();
+    log::trace!("conversion took {:?}", start.elapsed());
 
     let mut show_control_data = false;
     ev.run(move |event, _tgt, control_flow| {

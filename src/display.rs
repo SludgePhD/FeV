@@ -245,7 +245,7 @@ impl Display {
 
             log::info!("initialized libva {major}.{minor}");
 
-            Ok(Self {
+            let this = Self {
                 d: Arc::new(DisplayOwner {
                     raw,
                     libva,
@@ -254,7 +254,10 @@ impl Display {
                 api,
                 major: major as _,
                 minor: minor as _,
-            })
+            };
+            let vendor = this.query_vendor_string()?;
+            log::info!("VA-API vendor: {vendor}");
+            Ok(this)
         }
     }
 

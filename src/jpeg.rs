@@ -621,7 +621,6 @@ impl JpegDecodeSession {
         let mut picture = self.vpp_context.begin_picture(&mut self.vpp_surface)?;
         picture.render_picture(&mut pppbuf)?;
         unsafe { picture.end_picture()? }
-        log::debug!("submitted VPP op");
 
         drop(pppbuf);
 

@@ -93,7 +93,7 @@ impl<'a> InProgressPicture<'a> {
     /// # Safety
     ///
     /// libva does not specify when Undefined Behavior occurs, and in practice at least some
-    /// implementations exhibit UB-like behavior when buffers where submitted incorrectly (or when
+    /// implementations exhibit UB-like behavior when buffers are submitted incorrectly (or when
     /// not all buffers required by the operation were submitted). It also does not document which
     /// buffer types must be submitted (or must not be submitted) for any given entry point.
     ///

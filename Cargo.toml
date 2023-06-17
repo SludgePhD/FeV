@@ -1,10 +1,10 @@
 [package]
-name = "v-ayylmao"
-version = "0.0.5"
+name = "fev"
+version = "0.0.0"
 edition = "2021"
 license = "0BSD"
 description = "High-level VA-API bindings"
-repository = "https://github.com/SludgePhD/v-ayylmao"
+repository = "https://github.com/SludgePhD/FeV"
 keywords = ["libva", "video", "decode", "codec", "acceleration"]
 
 [dependencies]

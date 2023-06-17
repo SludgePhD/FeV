@@ -62,12 +62,6 @@ fn main() -> anyhow::Result<()> {
 
     let jpeg_info = JpegInfo::new(&jpeg)?;
     let mut context = JpegDecodeSession::new(&display, jpeg_info.width(), jpeg_info.height())?;
-    for _ in 0..20 {
-        let mapping = context.decode(&jpeg)?;
-        let start = Instant::now();
-        let _data = mapping.to_vec();
-        log::trace!("copy from VABuffer took {:?}", start.elapsed());
-    }
     let mapping = context.decode(&jpeg)?;
 
     log::debug!("{} byte output", mapping.len());

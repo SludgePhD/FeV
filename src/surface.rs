@@ -23,6 +23,7 @@ use crate::{
 
 bitflags! {
     /// Flags for configuring how a [`Surface`] should be exported.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ExportSurfaceFlags: u32 {
         /// Export the surface to be read by an external consumer.
         const READ = 0x0001;
@@ -37,6 +38,7 @@ bitflags! {
 
 bitflags! {
     /// Surface pixel formats.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct RTFormat: c_uint {
         const YUV420    = 0x00000001;
         const YUV422    = 0x00000002;
@@ -290,6 +292,7 @@ impl fmt::Debug for GenericValue {
 
 bitflags! {
     /// Flags associated with a queried [`SurfaceAttrib`].
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SurfaceAttribFlags: c_int {
         const GETTABLE = 0x00000001;
         const SETTABLE = 0x00000002;
@@ -297,6 +300,7 @@ bitflags! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SurfaceAttribMemoryType: u32 {
         // Generic types
         const VA       = 0x00000001;

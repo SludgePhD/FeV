@@ -216,6 +216,7 @@ ffi_enum! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct BlendFlags: u32 {
         const GLOBAL_ALPHA        = 0x0001;
         const PREMULTIPLIED_ALPHA = 0x0002;
@@ -225,6 +226,7 @@ bitflags! {
 
 bitflags! {
     /// Flags that may be applied to a video processing pipeline.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct PipelineFlags: u32 {
         const SUBPICTURES = 0x00000001;
         const FAST        = 0x00000002;
@@ -234,6 +236,7 @@ bitflags! {
 
 bitflags! {
     /// Flags and properties that may be applied to each individual filter stage.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct FilterFlags: u32 {
         const MANDATORY     = 0x00000001;
 
@@ -259,6 +262,7 @@ bitflags! {
 
 bitflags! {
     /// The supported [`Rotation`]s.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct RotationFlags: u32 {
         const R90 = 1 << Rotation::R90.0;
         const R180 = 1 << Rotation::R180.0;
@@ -295,6 +299,7 @@ ffi_enum! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ToneMapping: u16 {
         const HDR_TO_HDR = 0x0001;
         const HDR_TO_SDR = 0x0002;

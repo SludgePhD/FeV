@@ -107,6 +107,7 @@ ffi_enum! {
 
 bitflags! {
     /// Mirroring directions.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Mirror: u32 {
         const NONE = 0;
         const HORIZONTAL = 0x00000001;
@@ -118,6 +119,7 @@ bitflags! {
     /// Indicates what part of the slice is being submitted.
     ///
     /// Typically, the whole slice is submitted at once ([`SliceDataFlags::ALL`]).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SliceDataFlags: u32 {
         /// The entire slice is being submitted at once.
         const ALL    = 0x00;

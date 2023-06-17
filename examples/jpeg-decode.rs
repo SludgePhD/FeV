@@ -1,11 +1,11 @@
-use std::{rc::Rc, time::Instant};
+use std::{num::NonZeroU32, rc::Rc, time::Instant};
 
 use anyhow::bail;
 use fev::{
     display::Display,
     jpeg::{JpegDecodeSession, JpegInfo},
 };
-use softbuffer::GraphicsContext;
+use softbuffer::{Context, Surface};
 use winit::{
     dpi::PhysicalSize,
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -48,7 +48,15 @@ fn main() -> anyhow::Result<()> {
         .build(&ev)?;
     let win = Rc::new(win);
 
-    let mut graphics_context = unsafe { GraphicsContext::new(&win, &win) }.unwrap();
+    let graphics_context = unsafe { Context::new(&win).unwrap() };
+    let mut surface = unsafe { Surface::new(&graphics_context, &win).unwrap() };
+    let PhysicalSize { width, height } = win.inner_size();
+    surface
+        .resize(
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+        )
+        .unwrap();
 
     let display = Display::new(win.clone())?;
 
@@ -88,16 +96,14 @@ fn main() -> anyhow::Result<()> {
 
         match event {
             Event::RedrawRequested(_) => {
-                let (width, height) = {
-                    let size = win.inner_size();
-                    (size.width, size.height)
-                };
                 let data = if show_control_data {
                     &control_data
                 } else {
                     &decoded_data
                 };
-                graphics_context.set_buffer(data, width as u16, height as u16);
+                let mut buffer = surface.buffer_mut().unwrap();
+                buffer.copy_from_slice(data);
+                buffer.present().unwrap();
                 win.set_title(&format!("control={}", show_control_data));
             }
             Event::WindowEvent {

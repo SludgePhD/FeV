@@ -49,6 +49,7 @@ ffi_enum! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct DisplayAttribFlags: u32 {
         const GETTABLE = 0x0001;
         const SETTABLE = 0x0002;

@@ -7,6 +7,7 @@ use std::vec;
 use crate::image::ImageFormat;
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SubpictureFlags: u32 {
         const CHROMA_KEYING = 0x0001;
         const GLOBAL_ALPHA  = 0x0002;

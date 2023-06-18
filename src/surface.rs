@@ -14,6 +14,7 @@ use crate::{
     buffer::Mapping,
     check, check_log,
     display::{Display, DisplayOwner},
+    dlopen::{libva_wayland, wl_buffer},
     error::VAError,
     image::{Image, ImageFormat},
     pixelformat::PixelFormat,
@@ -422,6 +423,30 @@ impl Surface {
                 d: self.d.clone(),
                 raw: image.assume_init(),
             })
+        }
+    }
+
+    /// Returns a pointer to the `wl_buffer` containing this [`Surface`]s pixel data.
+    ///
+    /// This function will only succeed if the [`Display`] this [`Surface`] was created from is
+    /// using the Wayland backend. To check the VA-API backend type, use [`Display::display_api`].
+    ///
+    /// The returned pointer is valid while the [`Surface`] exists.
+    ///
+    /// [`Surface::sync`] should be called before using the `wl_buffer`, to ensure that all enqueued
+    /// operations have finished.
+    ///
+    /// **Note**: The underlying function, `vaGetSurfaceBufferWl`, is not implemented on Mesa/AMD,
+    /// so this will always return an error there.
+    pub fn wayland_buffer(&self) -> Result<*mut wl_buffer> {
+        unsafe {
+            let mut wlbufferptr = MaybeUninit::uninit();
+            check(
+                libva_wayland::get()
+                    .map_err(Error::from)?
+                    .vaGetSurfaceBufferWl(self.d.raw, self.id, 0, wlbufferptr.as_mut_ptr()),
+            )?;
+            Ok(wlbufferptr.assume_init())
         }
     }
 }

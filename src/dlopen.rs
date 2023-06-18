@@ -176,6 +176,8 @@ dylib! {
     pub struct libva_wayland;
 
     fn vaGetDisplayWl(display: *mut wl_display) -> VADisplay;
+    fn vaGetSurfaceBufferWl(dpy: VADisplay, surface: VASurfaceID, flags: c_uint, out_buffer: *mut *mut wl_buffer) -> VAStatus;
+    fn vaGetImageBufferWl(dpy: VADisplay, image: VAImageID, flags: c_uint, out_buffer: *mut *mut wl_buffer) -> VAStatus;
 }
 
 dylib! {
@@ -185,6 +187,7 @@ dylib! {
 }
 
 pub struct wl_display;
+pub struct wl_buffer;
 
 /// Opaque type representing the Xlib X11 `Display` type.
 pub struct Display;

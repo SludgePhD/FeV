@@ -126,14 +126,17 @@ impl Config {
     ) -> Result<Self> {
         unsafe {
             let mut config_id = 0;
-            check(display.d.libva.vaCreateConfig(
-                display.d.raw,
-                profile,
-                entrypoint,
-                attribs.as_mut_ptr(),
-                attribs.len().try_into().unwrap(),
-                &mut config_id,
-            ))?;
+            check(
+                "vaCreateConfig",
+                display.d.libva.vaCreateConfig(
+                    display.d.raw,
+                    profile,
+                    entrypoint,
+                    attribs.as_mut_ptr(),
+                    attribs.len().try_into().unwrap(),
+                    &mut config_id,
+                ),
+            )?;
             Ok(Config {
                 d: display.d.clone(),
                 id: config_id,
@@ -151,16 +154,19 @@ impl Config {
                 &mut num_attribs,
             );
             if status != VAStatus::SUCCESS && status != VAError::ERROR_MAX_NUM_EXCEEDED {
-                return Err(check(status).unwrap_err());
+                return Err(check("vaQuerySurfaceAttributes", status).unwrap_err());
             }
 
             let mut attribs = Vec::with_capacity(num_attribs as usize);
-            check(self.d.libva.vaQuerySurfaceAttributes(
-                self.d.raw,
-                self.id,
-                attribs.as_mut_ptr(),
-                &mut num_attribs,
-            ))?;
+            check(
+                "vaQuerySurfaceAttributes",
+                self.d.libva.vaQuerySurfaceAttributes(
+                    self.d.raw,
+                    self.id,
+                    attribs.as_mut_ptr(),
+                    &mut num_attribs,
+                ),
+            )?;
             attribs.set_len(num_attribs as usize);
             Ok(SurfaceAttributes { vec: attribs })
         }
@@ -174,14 +180,17 @@ impl Config {
         let mut attrib_list = vec![ConfigAttrib::zeroed(); num_attribs];
         let mut num_attribs = 0;
         unsafe {
-            check(self.d.libva.vaQueryConfigAttributes(
-                self.d.raw,
-                self.id,
-                &mut profile,
-                &mut entrypoint,
-                attrib_list.as_mut_ptr(),
-                &mut num_attribs,
-            ))?;
+            check(
+                "vaQueryConfigAttributes",
+                self.d.libva.vaQueryConfigAttributes(
+                    self.d.raw,
+                    self.id,
+                    &mut profile,
+                    &mut entrypoint,
+                    attrib_list.as_mut_ptr(),
+                    &mut num_attribs,
+                ),
+            )?;
         }
         attrib_list.truncate(num_attribs as usize);
         attrib_list.shrink_to_fit();
@@ -198,8 +207,8 @@ impl Drop for Config {
     fn drop(&mut self) {
         unsafe {
             check_log(
+                "vaDestroyConfig",
                 self.d.libva.vaDestroyConfig(self.d.raw, self.id),
-                "vaDestroyConfig call in drop",
             );
         }
     }

@@ -224,17 +224,17 @@ impl IntoIterator for Entrypoints {
     }
 }
 
-fn check(status: VAStatus) -> Result<()> {
+fn check(location: &'static str, status: VAStatus) -> Result<()> {
     if status == VAStatus::SUCCESS {
         Ok(())
     } else {
-        Err(Error::from(VAError(status.0)))
+        Err(Error::from_va(location, VAError(status.0)))
     }
 }
 
-fn check_log(status: VAStatus, location: &'static str) {
-    match check(status) {
+fn check_log(location: &'static str, status: VAStatus) {
+    match check(location, status) {
         Ok(()) => {}
-        Err(e) => log::error!("ignoring error in {location}: {e}"),
+        Err(e) => log::error!("ignoring error in destructor: {e}"),
     }
 }

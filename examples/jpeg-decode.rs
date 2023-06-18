@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
 
     let jpeg_info = JpegInfo::new(&jpeg)?;
     let mut context = JpegDecodeSession::new(&display, jpeg_info.width(), jpeg_info.height())?;
-    let surf = context.decode_and_convert(&jpeg)?;
+    let surf = context.decode(&jpeg)?;
     let mapping = surf.map_sync()?;
 
     log::debug!("{} byte output", mapping.len());

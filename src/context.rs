@@ -19,16 +19,19 @@ impl Context {
     pub fn new(config: &Config, picture_width: u32, picture_height: u32) -> Result<Self> {
         unsafe {
             let mut context_id = 0;
-            check(config.d.libva.vaCreateContext(
-                config.d.raw,
-                config.id,
-                picture_width as _,
-                picture_height as _,
-                0,
-                ptr::null_mut(),
-                0,
-                &mut context_id,
-            ))?;
+            check(
+                "vaCreateContext",
+                config.d.libva.vaCreateContext(
+                    config.d.raw,
+                    config.id,
+                    picture_width as _,
+                    picture_height as _,
+                    0,
+                    ptr::null_mut(),
+                    0,
+                    &mut context_id,
+                ),
+            )?;
             Ok(Context {
                 d: config.d.clone(),
                 id: context_id,
@@ -43,6 +46,7 @@ impl Context {
     ) -> Result<InProgressPicture<'a>> {
         unsafe {
             check(
+                "vaBeginPicture",
                 self.d
                     .libva
                     .vaBeginPicture(self.d.raw, self.id, target.id()),
@@ -60,8 +64,8 @@ impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
             check_log(
+                "vaDestroyContext",
                 self.d.libva.vaDestroyContext(self.d.raw, self.id),
-                "vaDestroyContext call in drop",
             );
         }
     }
@@ -81,6 +85,7 @@ impl<'a> InProgressPicture<'a> {
     pub fn render_picture<T>(&mut self, buffer: &mut Buffer<T>) -> Result<()> {
         unsafe {
             check(
+                "vaRenderPicture",
                 self.d
                     .libva
                     .vaRenderPicture(self.d.raw, self.context.id, &mut buffer.id(), 1),
@@ -99,6 +104,9 @@ impl<'a> InProgressPicture<'a> {
     ///
     /// So, basically, the safety invariant of this method is "fuck if I know". Good luck, Loser.
     pub unsafe fn end_picture(self) -> Result<()> {
-        check(self.d.libva.vaEndPicture(self.d.raw, self.context.id))
+        check(
+            "vaEndPicture",
+            self.d.libva.vaEndPicture(self.d.raw, self.context.id),
+        )
     }
 }

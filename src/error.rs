@@ -86,7 +86,7 @@ impl VAError {
 }
 
 pub(crate) enum Repr {
-    Libva(VAError),
+    Libva(&'static str, VAError),
     Libloading(libloading::Error),
     Utf8Error(Utf8Error),
     TryFromIntError(TryFromIntError),
@@ -123,12 +123,6 @@ impl From<libloading::Error> for Repr {
     }
 }
 
-impl From<VAError> for Repr {
-    fn from(v: VAError) -> Self {
-        Self::Libva(v)
-    }
-}
-
 /// The main error type used by this library.
 pub struct Error {
     repr: Repr,
@@ -139,7 +133,7 @@ impl Error {
     /// code.
     pub fn as_libva(&self) -> Option<VAError> {
         match &self.repr {
-            Repr::Libva(e) => Some(*e),
+            Repr::Libva(_, e) => Some(*e),
             _ => None,
         }
     }
@@ -147,12 +141,18 @@ impl Error {
     pub(crate) fn from(e: impl Into<Repr>) -> Self {
         Self { repr: e.into() }
     }
+
+    pub(crate) fn from_va(location: &'static str, error: VAError) -> Self {
+        Self {
+            repr: Repr::Libva(location, error),
+        }
+    }
 }
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.repr {
-            Repr::Libva(e) => e.fmt(f),
+            Repr::Libva(loc, e) => write!(f, "{loc}: {e:?}"),
             Repr::Libloading(e) => e.fmt(f),
             Repr::Utf8Error(e) => e.fmt(f),
             Repr::TryFromIntError(e) => e.fmt(f),
@@ -164,8 +164,8 @@ impl fmt::Debug for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.repr {
-            Repr::Libva(e) => match e.to_str() {
-                Ok(s) => write!(f, "{self:?}: {s}"),
+            Repr::Libva(loc, e) => match e.to_str() {
+                Ok(s) => write!(f, "{loc}: {s} ({e:?})"),
                 Err(_) => fmt::Debug::fmt(e, f),
             },
             Repr::Libloading(e) => e.fmt(f),

@@ -31,12 +31,15 @@ impl Context {
         let mut num_filters = PREALLOC as c_uint;
         let mut filters = vec![FilterType::None; PREALLOC];
         unsafe {
-            check(self.d.libva.vaQueryVideoProcFilters(
-                self.d.raw,
-                self.id,
-                filters.as_mut_ptr(),
-                &mut num_filters,
-            ))?;
+            check(
+                "vaQueryVideoProcFilters",
+                self.d.libva.vaQueryVideoProcFilters(
+                    self.d.raw,
+                    self.id,
+                    filters.as_mut_ptr(),
+                    &mut num_filters,
+                ),
+            )?;
         }
 
         assert_ne!(
@@ -69,13 +72,16 @@ impl Context {
             caps.num_input_pixel_formats = input_pixel_formats.len() as _;
             caps.output_pixel_format = output_pixel_formats.as_mut_ptr();
             caps.num_output_pixel_formats = output_pixel_formats.len() as _;
-            check(self.d.libva.vaQueryVideoProcPipelineCaps(
-                self.d.raw,
-                self.id,
-                filters.as_mut_ptr(),
-                filters.len().try_into().unwrap(),
-                &mut caps,
-            ))?;
+            check(
+                "vaQueryVideoProcPipelineCaps",
+                self.d.libva.vaQueryVideoProcPipelineCaps(
+                    self.d.raw,
+                    self.id,
+                    filters.as_mut_ptr(),
+                    filters.len().try_into().unwrap(),
+                    &mut caps,
+                ),
+            )?;
 
             // Intel's and Mesa's implementation doesn't use the user-provided buffers, but changes
             // the pointer to point to static data, despite the `va_vpp.h` docs implying otherwise.

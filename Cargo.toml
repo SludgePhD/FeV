@@ -1,6 +1,6 @@
 [package]
 name = "fev"
-version = "0.0.0"
+version = "0.0.5"
 edition = "2021"
 license = "0BSD"
 description = "High-level VA-API bindings"

@@ -198,13 +198,16 @@ impl Image {
         let height: c_int = height.try_into().map_err(Error::from)?;
         let mut image = MaybeUninit::uninit();
         unsafe {
-            check(display.d.libva.vaCreateImage(
-                display.d.raw,
-                &mut format,
-                width,
-                height,
-                image.as_mut_ptr(),
-            ))?;
+            check(
+                "vaCreateImage",
+                display.d.libva.vaCreateImage(
+                    display.d.raw,
+                    &mut format,
+                    width,
+                    height,
+                    image.as_mut_ptr(),
+                ),
+            )?;
             Ok(Image {
                 d: display.d.clone(),
                 raw: image.assume_init(),
@@ -243,7 +246,10 @@ impl Image {
 
         let mut ptr = ptr::null_mut();
         unsafe {
-            check(self.d.libva.vaMapBuffer(self.d.raw, self.raw.buf, &mut ptr))?;
+            check(
+                "vaMapBuffer",
+                self.d.libva.vaMapBuffer(self.d.raw, self.raw.buf, &mut ptr),
+            )?;
         }
 
         log::trace!("vaMapBuffer for VAImage took {:?}", start.elapsed());
@@ -261,8 +267,8 @@ impl Drop for Image {
     fn drop(&mut self) {
         unsafe {
             check_log(
+                "vaDestroyImage",
                 self.d.libva.vaDestroyImage(self.d.raw, self.raw.image_id),
-                "vaDestroyImage call in drop",
             );
         }
     }

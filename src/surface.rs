@@ -336,16 +336,19 @@ impl Surface {
     ) -> Result<Self> {
         let mut id = 0;
         unsafe {
-            check(display.d.libva.vaCreateSurfaces(
-                display.d.raw,
-                format,
-                width as c_uint,
-                height as c_uint,
-                &mut id,
-                1,
-                attribs.as_mut_ptr(),
-                attribs.len() as c_uint,
-            ))?;
+            check(
+                "vaCreateSurfaces",
+                display.d.libva.vaCreateSurfaces(
+                    display.d.raw,
+                    format,
+                    width as c_uint,
+                    height as c_uint,
+                    &mut id,
+                    1,
+                    attribs.as_mut_ptr(),
+                    attribs.len() as c_uint,
+                ),
+            )?;
         }
         Ok(Surface {
             d: display.d.clone(),
@@ -362,7 +365,12 @@ impl Surface {
     pub fn sync(&mut self) -> Result<()> {
         let start = Instant::now();
 
-        unsafe { check(self.d.libva.vaSyncSurface(self.d.raw, self.id))? }
+        unsafe {
+            check(
+                "vaSyncSurface",
+                self.d.libva.vaSyncSurface(self.d.raw, self.id),
+            )?
+        }
 
         log::trace!("vaSyncSurface took {:?}", start.elapsed());
         Ok(())
@@ -372,6 +380,7 @@ impl Surface {
         let mut status = SurfaceStatus(0);
         unsafe {
             check(
+                "vaQuerySurfaceStatus",
                 self.d
                     .libva
                     .vaQuerySurfaceStatus(self.d.raw, self.id, &mut status),
@@ -391,15 +400,18 @@ impl Surface {
         let start = Instant::now();
 
         unsafe {
-            check(self.d.libva.vaGetImage(
-                self.d.raw,
-                self.id,
-                0,
-                0,
-                image.width().into(),
-                image.height().into(),
-                image.id(),
-            ))?;
+            check(
+                "vaGetImage",
+                self.d.libva.vaGetImage(
+                    self.d.raw,
+                    self.id,
+                    0,
+                    0,
+                    image.width().into(),
+                    image.height().into(),
+                    image.id(),
+                ),
+            )?;
         }
 
         log::trace!("vaGetImage took {:?}", start.elapsed());
@@ -415,6 +427,7 @@ impl Surface {
         unsafe {
             let mut image = MaybeUninit::uninit();
             check(
+                "vaDeriveImage",
                 self.d
                     .libva
                     .vaDeriveImage(self.d.raw, self.id, image.as_mut_ptr()),
@@ -442,6 +455,7 @@ impl Surface {
         unsafe {
             let mut wlbufferptr = MaybeUninit::uninit();
             check(
+                "vaGetSurfaceBufferWl",
                 libva_wayland::get()
                     .map_err(Error::from)?
                     .vaGetSurfaceBufferWl(self.d.raw, self.id, 0, wlbufferptr.as_mut_ptr()),
@@ -455,8 +469,8 @@ impl Drop for Surface {
     fn drop(&mut self) {
         unsafe {
             check_log(
+                "vaDestroySurfaces",
                 self.d.libva.vaDestroySurfaces(self.d.raw, &mut self.id, 1),
-                "vaDestroySurfaces call in drop",
             );
         }
     }

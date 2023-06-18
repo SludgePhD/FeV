@@ -87,8 +87,8 @@ impl Drop for RawBuffer {
     fn drop(&mut self) {
         unsafe {
             check_log(
+                "vaDestroyBuffer",
                 self.d.libva.vaDestroyBuffer(self.d.raw, self.id),
-                "vaDestroyBuffer call in drop",
             );
         }
     }
@@ -111,15 +111,18 @@ impl Buffer<u8> {
     pub fn new_data(cx: &Context, buf_ty: BufferType, data: &[u8]) -> Result<Buffer<u8>> {
         let mut buf_id = 0;
         unsafe {
-            check(cx.d.libva.vaCreateBuffer(
-                cx.d.raw,
-                cx.id,
-                buf_ty,
-                c_uint::try_from(data.len()).unwrap(),
-                1,
-                data.as_ptr() as *mut _,
-                &mut buf_id,
-            ))?;
+            check(
+                "vaCreateBuffer",
+                cx.d.libva.vaCreateBuffer(
+                    cx.d.raw,
+                    cx.id,
+                    buf_ty,
+                    c_uint::try_from(data.len()).unwrap(),
+                    1,
+                    data.as_ptr() as *mut _,
+                    &mut buf_id,
+                ),
+            )?;
         }
         Ok(Buffer {
             raw: RawBuffer {
@@ -140,15 +143,18 @@ impl<T> Buffer<T> {
     {
         let mut buf_id = 0;
         unsafe {
-            check(cx.d.libva.vaCreateBuffer(
-                cx.d.raw,
-                cx.id,
-                buf_ty,
-                mem::size_of::<T>() as c_uint,
-                c_uint::try_from(num_elements).unwrap(),
-                ptr::null_mut(),
-                &mut buf_id,
-            ))?;
+            check(
+                "vaCreateBuffer",
+                cx.d.libva.vaCreateBuffer(
+                    cx.d.raw,
+                    cx.id,
+                    buf_ty,
+                    mem::size_of::<T>() as c_uint,
+                    c_uint::try_from(num_elements).unwrap(),
+                    ptr::null_mut(),
+                    &mut buf_id,
+                ),
+            )?;
         }
         Ok(Buffer {
             raw: RawBuffer {
@@ -170,15 +176,18 @@ impl<T> Buffer<T> {
     {
         let mut buf_id = 0;
         unsafe {
-            check(cx.d.libva.vaCreateBuffer(
-                cx.d.raw,
-                cx.id,
-                buf_ty,
-                mem::size_of::<T>() as c_uint,
-                1,
-                &mut content as *mut _ as *mut c_void,
-                &mut buf_id,
-            ))?;
+            check(
+                "vaCreateBuffer",
+                cx.d.libva.vaCreateBuffer(
+                    cx.d.raw,
+                    cx.id,
+                    buf_ty,
+                    mem::size_of::<T>() as c_uint,
+                    1,
+                    &mut content as *mut _ as *mut c_void,
+                    &mut buf_id,
+                ),
+            )?;
         }
         Ok(Buffer {
             raw: RawBuffer {
@@ -200,6 +209,7 @@ impl<T> Buffer<T> {
         let mut ptr = ptr::null_mut();
         unsafe {
             check(
+                "vaMapBuffer",
                 self.raw
                     .d
                     .libva
@@ -217,6 +227,7 @@ impl<T> Buffer<T> {
     pub fn sync(&mut self) -> Result<()> {
         unsafe {
             check(
+                "vaSyncBuffer",
                 self.raw
                     .d
                     .libva
@@ -284,8 +295,8 @@ impl<'a, T> Drop for Mapping<'a, T> {
     fn drop(&mut self) {
         unsafe {
             check_log(
+                "vaUnmapBuffer",
                 self.d.libva.vaUnmapBuffer(self.d.raw, self.id),
-                "vaUnmapBuffer call in drop",
             );
         }
     }

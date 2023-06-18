@@ -156,7 +156,7 @@ impl fmt::Debug for DisplayOwner {
 impl Drop for DisplayOwner {
     fn drop(&mut self) {
         unsafe {
-            check_log(self.libva.vaTerminate(self.raw), "vaTerminate call in drop");
+            check_log("vaTerminate", self.libva.vaTerminate(self.raw));
         }
     }
 }
@@ -242,7 +242,10 @@ impl Display {
 
             let mut major = 0;
             let mut minor = 0;
-            check(libva.vaInitialize(raw, &mut major, &mut minor))?;
+            check(
+                "vaInitialize",
+                libva.vaInitialize(raw, &mut major, &mut minor),
+            )?;
 
             log::info!("initialized libva {major}.{minor}");
 
@@ -295,6 +298,7 @@ impl Display {
         let mut num = 0;
         unsafe {
             check(
+                "vaQueryConfigProfiles",
                 self.d
                     .libva
                     .vaQueryConfigProfiles(self.d.raw, profiles.as_mut_ptr(), &mut num),
@@ -310,12 +314,15 @@ impl Display {
         let mut entrypoints = vec![Entrypoint(0); max];
         let mut num = 0;
         unsafe {
-            check(self.d.libva.vaQueryConfigEntrypoints(
-                self.d.raw,
-                profile,
-                entrypoints.as_mut_ptr(),
-                &mut num,
-            ))?;
+            check(
+                "vaQueryConfigEntrypoints",
+                self.d.libva.vaQueryConfigEntrypoints(
+                    self.d.raw,
+                    profile,
+                    entrypoints.as_mut_ptr(),
+                    &mut num,
+                ),
+            )?;
         }
         entrypoints.truncate(num as usize);
         Ok(Entrypoints { vec: entrypoints })
@@ -328,6 +335,7 @@ impl Display {
             let mut formats = vec![ImageFormat::zeroed(); max];
             let mut num = 0;
             check(
+                "vaQueryImageFormats",
                 self.d
                     .libva
                     .vaQueryImageFormats(self.d.raw, formats.as_mut_ptr(), &mut num),
@@ -343,12 +351,15 @@ impl Display {
             let mut formats = vec![ImageFormat::zeroed(); max];
             let mut flags: Vec<SubpictureFlags> = vec![SubpictureFlags::empty(); max];
             let mut num = 0;
-            check(self.d.libva.vaQuerySubpictureFormats(
-                self.d.raw,
-                formats.as_mut_ptr(),
-                flags.as_mut_ptr().cast(),
-                &mut num,
-            ))?;
+            check(
+                "vaQuerySubpictureFormats",
+                self.d.libva.vaQuerySubpictureFormats(
+                    self.d.raw,
+                    formats.as_mut_ptr(),
+                    flags.as_mut_ptr().cast(),
+                    &mut num,
+                ),
+            )?;
             formats.truncate(num as usize);
             flags.truncate(num as usize);
 
@@ -361,11 +372,12 @@ impl Display {
         let mut attribs = vec![DisplayAttribute::zeroed(); max];
         let mut num = 0;
         unsafe {
-            check(self.d.libva.vaQueryDisplayAttributes(
-                self.d.raw,
-                attribs.as_mut_ptr(),
-                &mut num,
-            ))?;
+            check(
+                "vaQueryDisplayAttributes",
+                self.d
+                    .libva
+                    .vaQueryDisplayAttributes(self.d.raw, attribs.as_mut_ptr(), &mut num),
+            )?;
         }
         attribs.truncate(num as usize);
         Ok(DisplayAttributes { vec: attribs })
@@ -384,6 +396,7 @@ impl Display {
             // NB: casting to a mutable pointer - libva doesn't modify the string, and other code
             // would probably break if it did
             check(
+                "vaSetDriverName",
                 self.d
                     .libva
                     .vaSetDriverName(self.d.raw, name.as_ptr() as *mut c_char),
@@ -393,11 +406,14 @@ impl Display {
 
     pub fn set_attributes(&mut self, attr_list: &mut [DisplayAttribute]) -> Result<()> {
         unsafe {
-            check(self.d.libva.vaSetDisplayAttributes(
-                self.d.raw,
-                attr_list.as_mut_ptr(),
-                attr_list.len().try_into().unwrap(),
-            ))?;
+            check(
+                "vaSetDisplayAttributes",
+                self.d.libva.vaSetDisplayAttributes(
+                    self.d.raw,
+                    attr_list.as_mut_ptr(),
+                    attr_list.len().try_into().unwrap(),
+                ),
+            )?;
             Ok(())
         }
     }

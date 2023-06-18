@@ -10,13 +10,13 @@ use std::{cmp, mem};
 use bytemuck::{AnyBitPattern, Pod, Zeroable};
 
 use crate::{
-    buffer::{Buffer, BufferType, Mapping},
+    buffer::{Buffer, BufferType},
     config::Config,
     context::Context,
     display::Display,
     error::Error,
     raw::{VA_PADDING_LOW, VA_PADDING_MEDIUM},
-    surface::{Surface, SurfaceWithImage},
+    surface::SurfaceWithImage,
     vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
     Entrypoint, PixelFormat, Profile, Result, Rotation, SliceParameterBufferBase,
 };
@@ -418,7 +418,7 @@ pub struct JpegDecodeSession {
     width: u32,
     height: u32,
 
-    jpeg_surface: Surface,
+    jpeg_surface: SurfaceWithImage,
     vpp_surface: SurfaceWithImage,
 
     jpeg_context: Context,
@@ -442,12 +442,7 @@ impl JpegDecodeSession {
         let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
         let vpp_context = Context::new(&config, width, height)?;
 
-        let jpeg_surface = Surface::new(
-            &display,
-            width,
-            height,
-            PixelFormat::NV12.to_rtformat().unwrap(),
-        )?;
+        let jpeg_surface = SurfaceWithImage::new(&display, width, height, PixelFormat::NV12)?;
         let vpp_surface = SurfaceWithImage::new(&display, width, height, PixelFormat::RGBA)?;
 
         log::debug!("image format = {:?}", vpp_surface.image());
@@ -470,7 +465,7 @@ impl JpegDecodeSession {
     ///
     /// This method returns an error when the JPEG is malformed or VA-API returns an error during
     /// decoding.
-    pub fn decode(&mut self, jpeg: &[u8]) -> Result<Mapping<'_, u8>> {
+    pub fn decode(&mut self, jpeg: &[u8]) -> Result<&mut SurfaceWithImage> {
         // TODO make this more flexible and move to `error` module
         macro_rules! bail {
             ($($args:tt)*) => {
@@ -605,6 +600,12 @@ impl JpegDecodeSession {
         picture.render_picture(&mut buf_slice_data)?;
         unsafe { picture.end_picture()? }
 
+        Ok(&mut self.jpeg_surface)
+    }
+
+    pub fn decode_and_convert(&mut self, jpeg: &[u8]) -> Result<&mut SurfaceWithImage> {
+        self.decode(jpeg)?;
+
         let mut pppbuf = ProcPipelineParameterBuffer::new(&self.jpeg_surface);
         // The input color space is the JPEG color space
         let input_props = ColorProperties::new().with_color_range(SourceRange::FULL);
@@ -624,6 +625,6 @@ impl JpegDecodeSession {
 
         drop(pppbuf);
 
-        self.vpp_surface.map_sync()
+        Ok(&mut self.vpp_surface)
     }
 }

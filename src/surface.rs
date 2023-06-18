@@ -1,5 +1,7 @@
 //! [`Surface`]s and surface attributes.
 
+pub mod drm;
+
 use core::fmt;
 use std::{
     ffi::{c_int, c_uint, c_void},

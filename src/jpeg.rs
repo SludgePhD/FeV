@@ -457,9 +457,14 @@ impl JpegDecodeSession {
         })
     }
 
-    /// Decodes a baseline JPEG, returning a [`Mapping`] containing the decoded image.
+    #[inline]
+    pub fn surface(&mut self) -> &mut SurfaceWithImage {
+        &mut self.jpeg_surface
+    }
+
+    /// Decodes a baseline JPEG, returning a [`SurfaceWithImage`] containing the decoded image.
     ///
-    /// The decoded image data is in **RGBA** order and sRGB color space.
+    /// The decoded image is in the JPEG's native color space and uses an unspecified pixel format.
     ///
     /// # Errors
     ///

@@ -4,6 +4,7 @@ use anyhow::bail;
 use fev::{
     display::Display,
     jpeg::{JpegDecodeSession, JpegInfo},
+    surface::ExportSurfaceFlags,
 };
 use softbuffer::{Context, Surface};
 use winit::{
@@ -62,7 +63,12 @@ fn main() -> anyhow::Result<()> {
 
     let jpeg_info = JpegInfo::new(&jpeg)?;
     let mut context = JpegDecodeSession::new(&display, jpeg_info.width(), jpeg_info.height())?;
-    let surf = context.decode(&jpeg)?;
+    let prime = context
+        .surface()
+        .export_prime(ExportSurfaceFlags::SEPARATE_LAYERS | ExportSurfaceFlags::READ)?;
+    log::debug!("PRIME export: {prime:#?}");
+
+    let surf = context.decode_and_convert(&jpeg)?;
     let mapping = surf.map_sync()?;
 
     log::debug!("{} byte output", mapping.len());

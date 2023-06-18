@@ -87,7 +87,7 @@ impl VAError {
 
 pub(crate) enum Repr {
     Libva(&'static str, VAError),
-    Libloading(libloading::Error),
+    Libloading(&'static libloading::Error),
     Utf8Error(Utf8Error),
     TryFromIntError(TryFromIntError),
     Other(String),
@@ -117,8 +117,8 @@ impl From<Utf8Error> for Repr {
     }
 }
 
-impl From<libloading::Error> for Repr {
-    fn from(v: libloading::Error) -> Self {
+impl From<&'static libloading::Error> for Repr {
+    fn from(v: &'static libloading::Error) -> Self {
         Self::Libloading(v)
     }
 }

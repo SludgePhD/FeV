@@ -7,6 +7,7 @@
 use std::{
     ffi::c_void,
     os::raw::{c_char, c_float, c_int, c_uchar, c_uint},
+    sync::OnceLock,
 };
 
 use crate::{
@@ -22,8 +23,6 @@ use crate::{
     vpp::{FilterType, RawProcPipelineCaps},
     Entrypoint, Profile,
 };
-
-use once_cell::sync::OnceCell;
 
 /// `dylib! {}`
 macro_rules! dylib {
@@ -64,9 +63,12 @@ macro_rules! dylib {
                 }
             }
 
-            pub fn get() -> Result<&'static Self, libloading::Error> {
-                static CELL: OnceCell<$strukt> = OnceCell::new();
-                CELL.get_or_try_init(Self::load)
+            pub fn get() -> Result<&'static Self, &'static libloading::Error> {
+                static CELL: OnceLock<Result<$strukt, libloading::Error>> = OnceLock::new();
+                match CELL.get_or_init(Self::load) {
+                    Ok(this) => Ok(this),
+                    Err(e) => Err(e),
+                }
             }
 
             $(

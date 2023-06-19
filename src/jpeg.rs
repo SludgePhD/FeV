@@ -414,6 +414,8 @@ impl JpegInfo {
 ///
 /// This type encapsulates [`Surface`]s and [`Context`]s for decoding baseline JPEG files of a
 /// particular size. It will also convert the JPEG to standard sRGB color space.
+///
+/// [`Surface`]: crate::surface::Surface
 pub struct JpegDecodeSession {
     width: u32,
     height: u32,
@@ -433,6 +435,8 @@ impl JpegDecodeSession {
     /// This function will return an error if VA-API object creation fails. This typically means
     /// that the implementation does not support JPEG decoding, but it can also indicate that the
     /// JPEG is simply too large and smaller ones would work.
+    ///
+    /// [`Surface`]: crate::surface::Surface
     pub fn new(display: &Display, width: u16, height: u16) -> Result<Self> {
         let width = u32::from(width);
         let height = u32::from(height);

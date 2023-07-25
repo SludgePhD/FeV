@@ -346,7 +346,7 @@ impl<'a> HuffmanTable<'a> {
         self.header.TcTh & 0xf
     }
 
-    /// Returns an array containing the number of code of each length.
+    /// Returns an array containing the number of codes for each code length in bits.
     #[inline]
     pub fn Li(&self) -> &[u8; 16] {
         &self.header.Li

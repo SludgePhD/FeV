@@ -421,6 +421,40 @@ impl Surface {
         Ok(())
     }
 
+    /// Copies all pixels from the given [`Image`] onto `self`.
+    ///
+    /// This calls `vaPutImage`, which may be expensive on some drivers. If possible,
+    /// [`SurfaceWithImage`] should be used, so that `vaDeriveImage` is used instead if the driver
+    /// supports it.
+    pub fn copy_from_image(&mut self, image: &mut Image) -> Result<()> {
+        self.sync()?;
+
+        let start = Instant::now();
+
+        unsafe {
+            check(
+                "vaPutImage",
+                self.d.libva.vaPutImage(
+                    self.d.raw,
+                    self.id,
+                    image.id(),
+                    0,
+                    0,
+                    image.width().into(),
+                    image.height().into(),
+                    0,
+                    0,
+                    image.width().into(),
+                    image.height().into(),
+                ),
+            )?;
+        }
+
+        log::trace!("vaPutImage took {:?}", start.elapsed());
+
+        Ok(())
+    }
+
     /// Creates an [`Image`] that allows direct access to the surface's image data.
     ///
     /// Only supported by some drivers, and only for some surface formats. Will return
@@ -605,5 +639,37 @@ impl From<SurfaceAttribEnum> for SurfaceAttrib {
             flags: SurfaceAttribFlags::SETTABLE,
             value,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test::*;
+
+    use super::*;
+
+    #[test]
+    fn image_copy() {
+        // 1x1 surfaces/images tend to fail with an allocation error, so use a larger size.
+        const TEST_WIDTH: u32 = 16;
+        const TEST_HEIGHT: u32 = 16;
+
+        let display = test_display();
+        let mut surface = test_surface(&display);
+        let mut output_image = Image::new(
+            &display,
+            ImageFormat::new(TEST_PIXELFORMAT),
+            TEST_WIDTH,
+            TEST_HEIGHT,
+        )
+        .expect("failed to create output image");
+
+        surface
+            .copy_to_image(&mut output_image)
+            .expect("Surface::copy_to_image failed");
+
+        surface.sync().unwrap();
+        let map = output_image.map().expect("failed to map output image");
+        assert_eq!(&map[..TEST_DATA.len()], TEST_DATA);
     }
 }

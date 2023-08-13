@@ -3,3 +3,4 @@
     the background?)
 - canonicalize object construction pattern (parent object method vs. `fn new` that takes the parent)
 - fix soundness
+- consistently use either u16 or u32 for widths/heights

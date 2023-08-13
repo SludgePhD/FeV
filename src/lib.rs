@@ -8,6 +8,9 @@ mod dlopen;
 mod pixelformat;
 mod raw;
 
+#[cfg(test)]
+mod test;
+
 pub mod buffer;
 pub mod config;
 pub mod context;

@@ -195,7 +195,7 @@ impl HuffmanTableBuffer {
     pub fn default_tables() -> Self {
         let mut this = Self::zeroed();
         this.set_huffman_table(0, &HuffmanTable::default_luminance());
-        this.set_huffman_table(1, &HuffmanTable::default_luminance());
+        this.set_huffman_table(1, &HuffmanTable::default_chrominance());
         this
     }
 

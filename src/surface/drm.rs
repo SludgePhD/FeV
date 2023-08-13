@@ -1,4 +1,6 @@
 //! DRM PRIME surface export/import.
+//!
+//! This wraps some of the functionality in `va_drmcommon.h`.
 
 use core::fmt;
 use std::{mem::MaybeUninit, os::fd::RawFd};
@@ -12,6 +14,8 @@ use super::{ExportSurfaceFlags, Surface, SurfaceAttribMemoryType};
 
 /// Describes how a [`Surface`] was exported to, or should be imported from, a set of DRM PRIME
 /// objects.
+///
+/// Returned by [`Surface::export_prime`].
 #[repr(C)]
 pub struct PrimeSurfaceDescriptor {
     fourcc: PixelFormat,
@@ -89,6 +93,10 @@ impl PrimeObject {
         self.size
     }
 
+    /// Returns the DRM format modifier of this object.
+    ///
+    /// The format modifier is an opaque 64-bit value. A list of them can be found in
+    /// `drm_fourcc.h`.
     #[inline]
     pub fn drm_format_modifier(&self) -> u64 {
         self.drm_format_modifier
@@ -185,6 +193,9 @@ impl Surface {
     ///
     /// This should be called right after creating the [`Surface`], before any operations are
     /// performed on it.
+    ///
+    /// Uses [`SurfaceAttribMemoryType::DRM_PRIME_2`] internally, which must be supported by the
+    /// driver in order for this method call to succeed.
     ///
     /// # Errors
     ///

@@ -650,26 +650,23 @@ mod tests {
 
     #[test]
     fn image_copy() {
-        // 1x1 surfaces/images tend to fail with an allocation error, so use a larger size.
-        const TEST_WIDTH: u32 = 16;
-        const TEST_HEIGHT: u32 = 16;
+        run_test(|display| {
+            let mut surface = test_surface(&display);
+            let mut output_image = Image::new(
+                &display,
+                ImageFormat::new(TEST_PIXELFORMAT),
+                TEST_WIDTH,
+                TEST_HEIGHT,
+            )
+            .expect("failed to create output image");
 
-        let display = test_display();
-        let mut surface = test_surface(&display);
-        let mut output_image = Image::new(
-            &display,
-            ImageFormat::new(TEST_PIXELFORMAT),
-            TEST_WIDTH,
-            TEST_HEIGHT,
-        )
-        .expect("failed to create output image");
+            surface
+                .copy_to_image(&mut output_image)
+                .expect("Surface::copy_to_image failed");
 
-        surface
-            .copy_to_image(&mut output_image)
-            .expect("Surface::copy_to_image failed");
-
-        surface.sync().unwrap();
-        let map = output_image.map().expect("failed to map output image");
-        assert_eq!(&map[..TEST_DATA.len()], TEST_DATA);
+            surface.sync().unwrap();
+            let map = output_image.map().expect("failed to map output image");
+            assert_eq!(&map[..TEST_DATA.len()], TEST_DATA);
+        });
     }
 }

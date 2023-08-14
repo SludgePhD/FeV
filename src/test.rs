@@ -1,6 +1,8 @@
 //! Unit test utilities.
 
-use winit::platform::x11::EventLoopBuilderExtX11;
+use std::{any::type_name, panic::catch_unwind, sync::OnceLock};
+
+use winit::{event_loop::EventLoop, platform::x11::EventLoopBuilderExtX11};
 
 use crate::{
     display::Display,
@@ -8,6 +10,15 @@ use crate::{
     surface::{RTFormat, Surface},
     PixelFormat,
 };
+
+struct DisplayHandle {
+    event_loop: EventLoop<()>,
+}
+
+unsafe impl Send for DisplayHandle {}
+unsafe impl Sync for DisplayHandle {}
+
+static EVENT_LOOP: OnceLock<anyhow::Result<DisplayHandle>> = OnceLock::new();
 
 pub const TEST_WIDTH: u32 = 16;
 pub const TEST_HEIGHT: u32 = 16;
@@ -19,13 +30,6 @@ pub const TEST_DATA: &[u8] = &[
     0xff, 0x00, 0xff, 0x00, // green
     0xff, 0xff, 0x00, 0x00, // blue
 ];
-
-pub fn test_display() -> Display {
-    let ev = winit::event_loop::EventLoopBuilder::new()
-        .with_any_thread(true)
-        .build();
-    Display::new(ev).expect("failed to obtain VA-API display")
-}
 
 /// Creates a [`Surface`] and fills its pixels with [`TEST_DATA`].
 pub fn test_surface(display: &Display) -> Surface {
@@ -50,4 +54,50 @@ pub fn test_surface(display: &Display) -> Surface {
     surface.sync().unwrap();
 
     surface
+}
+
+pub fn run_test<'a, T: FnOnce(&Display)>(test: T) {
+    let event_loop = match event_loop() {
+        Ok(h) => &h.event_loop,
+        Err(e) => {
+            log::warn!(
+                "skipping test '{}' due to error in requirements (event loop): {e}",
+                type_name::<T>()
+            );
+            return;
+        }
+    };
+
+    let display = match Display::new(event_loop) {
+        Ok(d) => d,
+        Err(e) => {
+            log::warn!(
+                "skipping test '{}' due to error in requirements (VADisplay): {e}",
+                type_name::<T>()
+            );
+            return;
+        }
+    };
+
+    test(&display);
+}
+
+fn event_loop() -> &'static anyhow::Result<DisplayHandle> {
+    // Frustratingly, winit seems to have no fallible construction methods for its event loop.
+    EVENT_LOOP.get_or_init(|| {
+        catch_unwind(|| {
+            let ev = winit::event_loop::EventLoopBuilder::new()
+                .with_any_thread(true)
+                .build();
+
+            DisplayHandle { event_loop: ev }
+        })
+        .map_err(|any| {
+            if let Some(s) = any.downcast_ref::<String>() {
+                anyhow::anyhow!("{s}")
+            } else {
+                anyhow::anyhow!("Box<dyn Any>")
+            }
+        })
+    })
 }

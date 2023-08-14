@@ -665,47 +665,47 @@ mod tests {
     #[test]
     #[ignore] // FIXME: fails on AMD/Mesa
     fn vpp_copy() {
-        let display = test_display();
+        run_test(|display| {
+            // Surface with test data.
+            let input_surface = test_surface(&display);
 
-        // Surface with test data.
-        let input_surface = test_surface(&display);
+            let mut output_surface =
+                Surface::new(&display, TEST_WIDTH, TEST_HEIGHT, TEST_RTFORMAT).unwrap();
 
-        let mut output_surface =
-            Surface::new(&display, TEST_WIDTH, TEST_HEIGHT, TEST_RTFORMAT).unwrap();
+            let config = Config::new(&display, Profile::None, Entrypoint::VideoProc).unwrap();
+            let mut context = Context::new(&config, TEST_WIDTH, TEST_HEIGHT).unwrap();
 
-        let config = Config::new(&display, Profile::None, Entrypoint::VideoProc).unwrap();
-        let mut context = Context::new(&config, TEST_WIDTH, TEST_HEIGHT).unwrap();
+            let mut pppbuf = ProcPipelineParameterBuffer::new(&input_surface);
+            let props = ColorProperties::new().with_color_range(SourceRange::FULL);
+            pppbuf.set_input_color_properties(props);
+            pppbuf.set_input_color_standard(ColorStandardType::BT601);
+            pppbuf.set_output_color_properties(props);
+            pppbuf.set_output_color_standard(ColorStandardType::SRGB);
 
-        let mut pppbuf = ProcPipelineParameterBuffer::new(&input_surface);
-        let props = ColorProperties::new().with_color_range(SourceRange::FULL);
-        pppbuf.set_input_color_properties(props);
-        pppbuf.set_input_color_standard(ColorStandardType::BT601);
-        pppbuf.set_output_color_properties(props);
-        pppbuf.set_output_color_standard(ColorStandardType::SRGB);
+            let mut params =
+                Buffer::new_param(&context, BufferType::ProcPipelineParameter, pppbuf).unwrap();
 
-        let mut params =
-            Buffer::new_param(&context, BufferType::ProcPipelineParameter, pppbuf).unwrap();
+            let mut picture = context.begin_picture(&mut output_surface).unwrap();
+            picture.render_picture(&mut params).unwrap();
+            unsafe {
+                picture.end_picture().unwrap();
+            }
 
-        let mut picture = context.begin_picture(&mut output_surface).unwrap();
-        picture.render_picture(&mut params).unwrap();
-        unsafe {
-            picture.end_picture().unwrap();
-        }
+            let mut output_image = Image::new(
+                &display,
+                ImageFormat::new(TEST_PIXELFORMAT),
+                TEST_WIDTH,
+                TEST_HEIGHT,
+            )
+            .expect("failed to create output image");
 
-        let mut output_image = Image::new(
-            &display,
-            ImageFormat::new(TEST_PIXELFORMAT),
-            TEST_WIDTH,
-            TEST_HEIGHT,
-        )
-        .expect("failed to create output image");
+            output_surface.sync().expect("sync failed");
+            // TODO: the following unwrap fails on AMD/Mesa for seemingly no reason
+            output_surface.copy_to_image(&mut output_image).unwrap();
 
-        output_surface.sync().expect("sync failed");
-        // TODO: the following unwrap fails on AMD/Mesa for seemingly no reason
-        output_surface.copy_to_image(&mut output_image).unwrap();
-
-        output_surface.sync().unwrap();
-        let map = output_image.map().expect("failed to map output image");
-        assert_eq!(&map[..TEST_DATA.len()], TEST_DATA);
+            output_surface.sync().unwrap();
+            let map = output_image.map().expect("failed to map output image");
+            assert_eq!(&map[..TEST_DATA.len()], TEST_DATA);
+        });
     }
 }

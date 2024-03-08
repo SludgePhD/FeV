@@ -2,11 +2,15 @@ use std::{num::NonZeroU32, rc::Rc, time::Instant};
 
 use anyhow::bail;
 use fev::{
+    buffer::{Buffer, BufferType},
+    config::Config,
+    context::Context,
     display::Display,
     image::{Image, ImageFormat},
     jpeg::{JpegDecodeSession, JpegInfo},
-    surface::ExportSurfaceFlags,
-    PixelFormat,
+    surface::{ExportSurfaceFlags, Surface},
+    vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
+    Entrypoint, PixelFormat, Profile,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -53,23 +57,30 @@ fn main() -> anyhow::Result<()> {
 
     let graphics_context = softbuffer::Context::new(win.clone()).unwrap();
     let mut surface = softbuffer::Surface::new(&graphics_context, win.clone()).unwrap();
-    let PhysicalSize { width, height } = win.inner_size();
-    log::info!("window size: {width}x{height}");
+    let s = win.inner_size();
+    log::info!("window size: {}x{}", s.width, s.height);
+
+    let jpeg_info = JpegInfo::new(&jpeg)?;
+    let (width, height) = (jpeg_info.width(), jpeg_info.height());
     surface
         .resize(
-            NonZeroU32::new(info.width.into()).unwrap(),
-            NonZeroU32::new(info.height.into()).unwrap(),
+            NonZeroU32::new(width.into()).unwrap(),
+            NonZeroU32::new(height.into()).unwrap(),
         )
         .unwrap();
 
     let display = Display::new(win.clone())?;
 
-    let jpeg_info = JpegInfo::new(&jpeg)?;
-    let mut context = JpegDecodeSession::new(&display, jpeg_info.width(), jpeg_info.height())?;
+    let mut context = JpegDecodeSession::new(&display, width, height)?;
     let prime = context
         .surface()
         .export_prime(ExportSurfaceFlags::SEPARATE_LAYERS | ExportSurfaceFlags::READ)?;
     log::debug!("PRIME export: {prime:#?}");
+
+    let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
+    let mut vpp_context = Context::new(&config, width.into(), height.into())?;
+    let mut vpp_surface =
+        Surface::with_pixel_format(&display, width.into(), height.into(), PixelFormat::RGBA)?;
 
     let mut image = Image::new(
         &display,
@@ -80,9 +91,32 @@ fn main() -> anyhow::Result<()> {
 
     log::debug!("<decode>");
     let start = Instant::now();
-    let surf = context.decode_and_convert(&jpeg)?;
+    let surf = context.decode(&jpeg)?;
     log::debug!("</decode> took {:?}", start.elapsed());
-    surf.copy_to_image(&mut image)?;
+
+    // Use VPP to convert the surface to RGBA.
+    let mut pppbuf = ProcPipelineParameterBuffer::new(surf);
+
+    // The input color space is the JPEG color space
+    let input_props = ColorProperties::new().with_color_range(SourceRange::FULL);
+    pppbuf.set_input_color_properties(input_props);
+    pppbuf.set_input_color_standard(ColorStandardType::BT601);
+    // The output color space is 8-bit non-linear sRGB
+    let output_props = ColorProperties::new().with_color_range(SourceRange::FULL);
+    pppbuf.set_output_color_properties(output_props);
+    pppbuf.set_output_color_standard(ColorStandardType::SRGB);
+    // NB: not all implementations support converting color standards (eg. Mesa).
+    // such implementations  will typically output an image that is brighter than the reference data.
+
+    let mut pppbuf = Buffer::new_param(&vpp_context, BufferType::ProcPipelineParameter, pppbuf)?;
+
+    let mut picture = vpp_context.begin_picture(&mut vpp_surface)?;
+    picture.render_picture(&mut pppbuf)?;
+    unsafe { picture.end_picture()? }
+
+    drop(pppbuf);
+
+    vpp_surface.copy_to_image(&mut image)?;
     let mapping = image.map()?;
 
     log::debug!("{} byte output", mapping.len());

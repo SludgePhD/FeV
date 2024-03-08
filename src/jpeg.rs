@@ -17,8 +17,7 @@ use crate::{
     error::Error,
     raw::{Rectangle, VA_PADDING_LOW, VA_PADDING_MEDIUM},
     surface::{RTFormat, Surface},
-    vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
-    Entrypoint, PixelFormat, Profile, Result, Rotation, SliceParameterBufferBase,
+    Entrypoint, Profile, Result, Rotation, SliceParameterBufferBase,
 };
 
 use self::parser::{JpegParser, SegmentKind, SofMarker};
@@ -420,12 +419,8 @@ impl JpegInfo {
 pub struct JpegDecodeSession {
     width: u32,
     height: u32,
-
     jpeg_surface: Surface,
-    vpp_surface: Surface,
-
     jpeg_context: Context,
-    vpp_context: Context,
 }
 
 impl JpegDecodeSession {
@@ -444,19 +439,13 @@ impl JpegDecodeSession {
 
         let config = Config::new(&display, Profile::JPEGBaseline, Entrypoint::VLD)?;
         let jpeg_context = Context::new(&config, width, height)?;
-        let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
-        let vpp_context = Context::new(&config, width, height)?;
-
         let jpeg_surface = Surface::new(&display, width, height, RTFormat::YUV420)?;
-        let vpp_surface = Surface::with_pixel_format(&display, width, height, PixelFormat::RGBA)?;
 
         Ok(Self {
             width,
             height,
             jpeg_surface,
-            vpp_surface,
             jpeg_context,
-            vpp_context,
         })
     }
 
@@ -613,30 +602,5 @@ impl JpegDecodeSession {
         unsafe { picture.end_picture()? }
 
         Ok(&mut self.jpeg_surface)
-    }
-
-    pub fn decode_and_convert(&mut self, jpeg: &[u8]) -> Result<&mut Surface> {
-        self.decode(jpeg)?;
-
-        let mut pppbuf = ProcPipelineParameterBuffer::new(&self.jpeg_surface);
-        // The input color space is the JPEG color space
-        let input_props = ColorProperties::new().with_color_range(SourceRange::FULL);
-        pppbuf.set_input_color_properties(input_props);
-        pppbuf.set_input_color_standard(ColorStandardType::BT601);
-        // The output color space is 8-bit non-linear sRGB
-        let output_props = ColorProperties::new().with_color_range(SourceRange::FULL);
-        pppbuf.set_output_color_properties(output_props);
-        pppbuf.set_output_color_standard(ColorStandardType::SRGB);
-
-        let mut pppbuf =
-            Buffer::new_param(&self.vpp_context, BufferType::ProcPipelineParameter, pppbuf)?;
-
-        let mut picture = self.vpp_context.begin_picture(&mut self.vpp_surface)?;
-        picture.render_picture(&mut pppbuf)?;
-        unsafe { picture.end_picture()? }
-
-        drop(pppbuf);
-
-        Ok(&mut self.vpp_surface)
     }
 }

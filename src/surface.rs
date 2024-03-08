@@ -485,6 +485,12 @@ impl Surface {
     /// [`VAError::ERROR_OPERATION_FAILED`] if it's not supported. In that case, the caller should
     /// fall back to creating an [`Image`] manually and using [`Surface::copy_to_image`]. The
     /// [`SurfaceWithImage`] type encapsulates that pattern and should be used for this if possible.
+    ///
+    /// # Bugs
+    ///
+    /// - Mesa has a bug in its implementation of `vaDeriveImage` where the resulting [`Image`]
+    ///   won't be mapped correctly and appear completely blank if this method is called before a
+    ///   decode operation is submitted.
     pub fn derive_image(&mut self) -> Result<Image> {
         unsafe {
             let mut image = MaybeUninit::uninit();

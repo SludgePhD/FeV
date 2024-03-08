@@ -524,7 +524,8 @@ impl Filters {
         }
     }
 
-    pub fn push<T: 'static>(&mut self, buffer: Buffer<T>) {
+    #[allow(unused)]
+    fn push<T: 'static>(&mut self, buffer: Buffer<T>) {
         // FIXME: once we have types for filter parameters, this should use a trait bound restricting them
         let id = buffer.id();
         self.buffers.push(buffer.into());

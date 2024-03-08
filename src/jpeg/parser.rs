@@ -389,6 +389,9 @@ pub struct Dri {
 }
 
 impl Dri {
+    /// Returns the number of MCUs per restart interval.
+    ///
+    /// A value of 0 disables restart intervals for the following scans.
     #[inline]
     pub fn Ri(&self) -> u16 {
         self.Ri

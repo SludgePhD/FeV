@@ -10,14 +10,14 @@ keywords = ["libva", "video", "decode", "codec", "acceleration"]
 [dependencies]
 libloading = "0.8.0"
 bitflags = "2.3.2"
-raw-window-handle = { version = "0.5.0", features = ["alloc"] }
+raw-window-handle = { version = "0.6.0", features = ["alloc"] }
 log = "0.4.17"
 bytemuck = { version = "1.12.1", features = ["derive", "min_const_generics"] }
 
 [dev-dependencies]
-winit = { version = "0.28.6", default-features = false, features = ["x11", "wayland", "wayland-dlopen"] }
-env_logger = "0.10.0"
-softbuffer = "0.3.0"
+winit = { version = "0.29.14", default-features = false, features = ["x11", "wayland", "wayland-dlopen", "rwh_06"] }
+env_logger = "0.11.3"
+softbuffer = "0.4.1"
 jpeg-decoder = "0.3.0"
 anyhow = "1.0.68"
 expect-test = "1.4.0"

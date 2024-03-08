@@ -10,8 +10,9 @@ use fev::{
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
+    event::{ElementState, Event, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::{Key, NamedKey},
     window::WindowBuilder,
 };
 
@@ -43,20 +44,21 @@ fn main() -> anyhow::Result<()> {
     let info = dec.info().unwrap();
     log::info!("image size: {}x{}", info.width, info.height);
 
-    let ev = EventLoop::new();
+    let ev = EventLoop::new()?;
     let win = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(info.width, info.height))
         .with_resizable(false)
         .build(&ev)?;
     let win = Rc::new(win);
 
-    let graphics_context = unsafe { softbuffer::Context::new(&win).unwrap() };
-    let mut surface = unsafe { softbuffer::Surface::new(&graphics_context, &win).unwrap() };
+    let graphics_context = softbuffer::Context::new(win.clone()).unwrap();
+    let mut surface = softbuffer::Surface::new(&graphics_context, win.clone()).unwrap();
     let PhysicalSize { width, height } = win.inner_size();
+    log::info!("window size: {width}x{height}");
     surface
         .resize(
-            NonZeroU32::new(width).unwrap(),
-            NonZeroU32::new(height).unwrap(),
+            NonZeroU32::new(info.width.into()).unwrap(),
+            NonZeroU32::new(info.height.into()).unwrap(),
         )
         .unwrap();
 
@@ -104,11 +106,14 @@ fn main() -> anyhow::Result<()> {
     log::trace!("conversion took {:?}", start.elapsed());
 
     let mut show_control_data = false;
-    ev.run(move |event, _tgt, control_flow| {
-        *control_flow = ControlFlow::Wait;
+    ev.run(move |event, tgt| {
+        tgt.set_control_flow(ControlFlow::Wait);
 
         match event {
-            Event::RedrawRequested(_) => {
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                ..
+            } => {
                 let data = if show_control_data {
                     &control_data
                 } else {
@@ -123,14 +128,14 @@ fn main() -> anyhow::Result<()> {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                *control_flow = ControlFlow::Exit;
+                tgt.exit();
             }
             Event::WindowEvent {
                 event:
                     WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(VirtualKeyCode::Space),
+                        event:
+                            KeyEvent {
+                                logical_key: Key::Named(NamedKey::Space),
                                 state: ElementState::Pressed,
                                 ..
                             },
@@ -148,5 +153,7 @@ fn main() -> anyhow::Result<()> {
             }
             _ => {}
         }
-    })
+    })?;
+
+    Ok(())
 }

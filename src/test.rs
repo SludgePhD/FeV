@@ -1,6 +1,6 @@
 //! Unit test utilities.
 
-use std::{any::type_name, panic::catch_unwind, sync::OnceLock};
+use std::{any::type_name, sync::OnceLock};
 
 use winit::{event_loop::EventLoop, platform::x11::EventLoopBuilderExtX11};
 
@@ -83,21 +83,11 @@ pub fn run_test<'a, T: FnOnce(&Display)>(test: T) {
 }
 
 fn event_loop() -> &'static anyhow::Result<DisplayHandle> {
-    // Frustratingly, winit seems to have no fallible construction methods for its event loop.
     EVENT_LOOP.get_or_init(|| {
-        catch_unwind(|| {
-            let ev = winit::event_loop::EventLoopBuilder::new()
-                .with_any_thread(true)
-                .build();
+        let ev = winit::event_loop::EventLoopBuilder::new()
+            .with_any_thread(true)
+            .build()?;
 
-            DisplayHandle { event_loop: ev }
-        })
-        .map_err(|any| {
-            if let Some(s) = any.downcast_ref::<String>() {
-                anyhow::anyhow!("{s}")
-            } else {
-                anyhow::anyhow!("Box<dyn Any>")
-            }
-        })
+        Ok(DisplayHandle { event_loop: ev })
     })
 }

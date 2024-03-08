@@ -90,7 +90,14 @@ pub(crate) enum Repr {
     Libloading(&'static libloading::Error),
     Utf8Error(Utf8Error),
     TryFromIntError(TryFromIntError),
+    HandleError(raw_window_handle::HandleError),
     Other(String),
+}
+
+impl From<raw_window_handle::HandleError> for Repr {
+    fn from(v: raw_window_handle::HandleError) -> Self {
+        Self::HandleError(v)
+    }
 }
 
 impl From<TryFromIntError> for Repr {
@@ -156,6 +163,7 @@ impl fmt::Debug for Error {
             Repr::Libloading(e) => e.fmt(f),
             Repr::Utf8Error(e) => e.fmt(f),
             Repr::TryFromIntError(e) => e.fmt(f),
+            Repr::HandleError(e) => e.fmt(f),
             Repr::Other(s) => s.fmt(f),
         }
     }
@@ -171,6 +179,7 @@ impl fmt::Display for Error {
             Repr::Libloading(e) => e.fmt(f),
             Repr::Utf8Error(e) => e.fmt(f),
             Repr::TryFromIntError(e) => e.fmt(f),
+            Repr::HandleError(e) => e.fmt(f),
             Repr::Other(e) => e.fmt(f),
         }
     }

@@ -5,12 +5,12 @@ use std::{
     ffi::{c_char, c_int, c_void, CStr},
     mem,
     panic::catch_unwind,
-    ptr,
+    ptr::{self, NonNull},
     sync::Arc,
     vec,
 };
 
-use raw_window_handle::{HasRawDisplayHandle, RawDisplayHandle};
+use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 use crate::{
     check, check_log,
@@ -138,7 +138,7 @@ pub(crate) struct DisplayOwner {
     pub(crate) raw: VADisplay,
     pub(crate) libva: &'static libva,
     #[allow(dead_code)]
-    display_handle_owner: Option<Box<dyn HasRawDisplayHandle>>,
+    display_handle_owner: Option<Box<dyn HasDisplayHandle>>,
 }
 
 // Safety: VA-API clearly and unambiguously documents that it is thread-safe.
@@ -182,8 +182,11 @@ impl Display {
     ///
     /// This function takes ownership of `handle` to ensure that the native display handle isn't
     /// closed before the VA-API [`Display`] is dropped.
-    pub fn new<H: HasRawDisplayHandle + 'static>(handle: H) -> Result<Self> {
-        Self::new_impl(handle.raw_display_handle(), Some(Box::new(handle)))
+    pub fn new<H: HasDisplayHandle + 'static>(handle: H) -> Result<Self> {
+        Self::new_impl(
+            handle.display_handle().map_err(Error::from)?.as_raw(),
+            Some(Box::new(handle)),
+        )
     }
 
     /// Opens a VA-API display from a raw, native display handle with unmanaged lifetime.
@@ -193,27 +196,28 @@ impl Display {
     /// It is the user's responsibility to ensure that the native display handle `handle` remains
     /// valid until the last VA-API object created from this [`Display`] (including the [`Display`]
     /// itself) has been destroyed.
-    pub unsafe fn new_unmanaged<H: HasRawDisplayHandle>(handle: &H) -> Result<Self> {
-        Self::new_impl(handle.raw_display_handle(), None)
+    pub unsafe fn new_unmanaged<H: HasDisplayHandle>(handle: &H) -> Result<Self> {
+        Self::new_impl(handle.display_handle().map_err(Error::from)?.as_raw(), None)
     }
 
     fn new_impl(
         handle: RawDisplayHandle,
-        display_handle_owner: Option<Box<dyn HasRawDisplayHandle>>,
+        display_handle_owner: Option<Box<dyn HasDisplayHandle>>,
     ) -> Result<Self> {
         unsafe {
             let raw: VADisplay;
             let api = match handle {
                 RawDisplayHandle::Xlib(d) => {
+                    let display = d.display.map_or(ptr::null_mut(), NonNull::as_ptr);
                     raw = libva_x11::get()
                         .map_err(Error::from)?
-                        .vaGetDisplay(d.display.cast());
+                        .vaGetDisplay(display.cast());
                     DisplayApi::Xlib
                 }
                 RawDisplayHandle::Wayland(d) => {
                     raw = libva_wayland::get()
                         .map_err(Error::from)?
-                        .vaGetDisplayWl(d.display.cast());
+                        .vaGetDisplayWl(d.display.as_ptr().cast());
                     DisplayApi::Wayland
                 }
                 RawDisplayHandle::Drm(d) => {

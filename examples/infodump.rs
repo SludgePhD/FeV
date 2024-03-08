@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter_module(env!("CARGO_PKG_NAME"), log::LevelFilter::Trace)
         .init();
 
-    let ev = EventLoop::new();
+    let ev = EventLoop::new()?;
 
     // Safety: `ev` is dropped after the `display` and all derived resources are dropped.
     // FIXME: use the safe API once winit implements `HasRawDisplayHandle` for `EventLoop`.

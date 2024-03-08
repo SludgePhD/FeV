@@ -15,8 +15,8 @@ use crate::{
     context::Context,
     display::Display,
     error::Error,
-    raw::{VA_PADDING_LOW, VA_PADDING_MEDIUM},
-    surface::SurfaceWithImage,
+    raw::{Rectangle, VA_PADDING_LOW, VA_PADDING_MEDIUM},
+    surface::{RTFormat, Surface},
     vpp::{ColorProperties, ColorStandardType, ProcPipelineParameterBuffer, SourceRange},
     Entrypoint, PixelFormat, Profile, Result, Rotation, SliceParameterBufferBase,
 };
@@ -63,7 +63,8 @@ pub struct PictureParameterBuffer {
     num_components: u8,
     color_space: ColorSpace,
     rotation: Rotation,
-    va_reserved: [u32; VA_PADDING_MEDIUM - 1],
+    crop_rectangle: Rectangle,
+    va_reserved: [u32; VA_PADDING_MEDIUM - 3],
 }
 
 #[derive(Clone, Copy)]
@@ -420,8 +421,8 @@ pub struct JpegDecodeSession {
     width: u32,
     height: u32,
 
-    jpeg_surface: SurfaceWithImage,
-    vpp_surface: SurfaceWithImage,
+    jpeg_surface: Surface,
+    vpp_surface: Surface,
 
     jpeg_context: Context,
     vpp_context: Context,
@@ -446,10 +447,8 @@ impl JpegDecodeSession {
         let config = Config::new(&display, Profile::None, Entrypoint::VideoProc)?;
         let vpp_context = Context::new(&config, width, height)?;
 
-        let jpeg_surface = SurfaceWithImage::new(&display, width, height, PixelFormat::NV12)?;
-        let vpp_surface = SurfaceWithImage::new(&display, width, height, PixelFormat::RGBA)?;
-
-        log::debug!("image format = {:?}", vpp_surface.image());
+        let jpeg_surface = Surface::new(&display, width, height, RTFormat::YUV420)?;
+        let vpp_surface = Surface::with_pixel_format(&display, width, height, PixelFormat::RGBA)?;
 
         Ok(Self {
             width,
@@ -462,11 +461,11 @@ impl JpegDecodeSession {
     }
 
     #[inline]
-    pub fn surface(&mut self) -> &mut SurfaceWithImage {
+    pub fn surface(&mut self) -> &mut Surface {
         &mut self.jpeg_surface
     }
 
-    /// Decodes a baseline JPEG, returning a [`SurfaceWithImage`] containing the decoded image.
+    /// Decodes a baseline JPEG, returning a [`Surface`] containing the decoded image.
     ///
     /// The decoded image is in the JPEG's native color space and uses an unspecified pixel format.
     ///
@@ -474,7 +473,7 @@ impl JpegDecodeSession {
     ///
     /// This method returns an error when the JPEG is malformed or VA-API returns an error during
     /// decoding.
-    pub fn decode(&mut self, jpeg: &[u8]) -> Result<&mut SurfaceWithImage> {
+    pub fn decode(&mut self, jpeg: &[u8]) -> Result<&mut Surface> {
         // TODO make this more flexible and move to `error` module
         macro_rules! bail {
             ($($args:tt)*) => {
@@ -589,8 +588,12 @@ impl JpegDecodeSession {
             }
         }
 
-        let Some(ppbuf) = ppbuf else { bail!("file is missing SOI segment") };
-        let Some((slice_params, slice_data)) = slice else { bail!("file is missing SOS header") };
+        let Some(ppbuf) = ppbuf else {
+            bail!("file is missing SOI segment")
+        };
+        let Some((slice_params, slice_data)) = slice else {
+            bail!("file is missing SOS header")
+        };
 
         let mut buf_dht = Buffer::new_param(&self.jpeg_context, BufferType::HuffmanTable, dhtbuf)?;
         let mut buf_iq = Buffer::new_param(&self.jpeg_context, BufferType::IQMatrix, iqbuf)?;
@@ -612,7 +615,7 @@ impl JpegDecodeSession {
         Ok(&mut self.jpeg_surface)
     }
 
-    pub fn decode_and_convert(&mut self, jpeg: &[u8]) -> Result<&mut SurfaceWithImage> {
+    pub fn decode_and_convert(&mut self, jpeg: &[u8]) -> Result<&mut Surface> {
         self.decode(jpeg)?;
 
         let mut pppbuf = ProcPipelineParameterBuffer::new(&self.jpeg_surface);

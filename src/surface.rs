@@ -326,7 +326,31 @@ pub struct Surface {
 
 impl Surface {
     pub fn new(display: &Display, width: u32, height: u32, format: RTFormat) -> Result<Self> {
+        log::trace!("creating {width}x{height} surface with {format:?}");
         Self::with_attribs(display, width, height, format, &mut [])
+    }
+
+    pub fn with_pixel_format(
+        display: &Display,
+        width: u32,
+        height: u32,
+        format: PixelFormat,
+    ) -> Result<Self> {
+        let rtformat = format.to_rtformat().ok_or_else(|| {
+            Error::from(format!(
+                "no RTFormat to go with the requested pixel format {:?}",
+                format
+            ))
+        })?;
+
+        log::trace!("creating {width}x{height} surface with format {format:?} and {rtformat:?}");
+        Self::with_attribs(
+            &display,
+            width,
+            height,
+            rtformat,
+            &mut [SurfaceAttribEnum::PixelFormat(format).into()],
+        )
     }
 
     pub fn with_attribs(
@@ -458,7 +482,9 @@ impl Surface {
     /// Creates an [`Image`] that allows direct access to the surface's image data.
     ///
     /// Only supported by some drivers, and only for some surface formats. Will return
-    /// [`VAError::ERROR_OPERATION_FAILED`] if it's not supported.
+    /// [`VAError::ERROR_OPERATION_FAILED`] if it's not supported. In that case, the caller should
+    /// fall back to creating an [`Image`] manually and using [`Surface::copy_to_image`]. The
+    /// [`SurfaceWithImage`] type encapsulates that pattern and should be used for this if possible.
     pub fn derive_image(&mut self) -> Result<Image> {
         unsafe {
             let mut image = MaybeUninit::uninit();
@@ -531,28 +557,14 @@ impl SurfaceWithImage {
     /// The [`RTFormat`] of the [`Surface`] will be determined automatically based on the specified
     /// [`PixelFormat`].
     pub fn new(display: &Display, width: u32, height: u32, format: PixelFormat) -> Result<Self> {
-        let rtformat = format.to_rtformat().ok_or_else(|| {
-            Error::from(format!(
-                "pixel format {:?} is unknown or unimplemented",
-                format
-            ))
-        })?;
-
-        let mut surface = Surface::with_attribs(
-            &display,
-            width,
-            height,
-            rtformat,
-            &mut [SurfaceAttribEnum::PixelFormat(format).into()],
-        )?;
+        let mut surface = Surface::with_pixel_format(display, width, height, format)?;
 
         // Try to use `vaDeriveImage` first, fall back if that fails.
         match surface.derive_image() {
             Ok(image) => {
                 log::trace!(
                     "using vaDeriveImage for fast surface access \
-                    (surface format = {:?}, image format = {:?})",
-                    rtformat,
+                    (image format = {:?})",
                     format,
                 );
 
@@ -563,7 +575,10 @@ impl SurfaceWithImage {
                 })
             }
             Err(e) if e.as_libva() == Some(VAError::ERROR_OPERATION_FAILED) => {
-                log::trace!("vaDeriveImage not supported, using vaGetImage (surface format = {:?}, image format = {:?})", rtformat, format);
+                log::trace!(
+                    "vaDeriveImage not supported, using vaGetImage (simage format = {:?})",
+                    format
+                );
 
                 let image = Image::new(display, ImageFormat::new(format), width, height)?;
                 Ok(Self {
@@ -586,6 +601,7 @@ impl SurfaceWithImage {
         &self.image
     }
 
+    /// Synchronizes the [`Surface`] and [`Image`] contents and maps the [`Image`] into memory.
     pub fn map_sync(&mut self) -> Result<Mapping<'_, u8>> {
         if self.derived {
             self.surface.sync()?;

@@ -23,8 +23,13 @@ impl PixelFormat {
 
     /// Interleaved YUV 4:2:2, stored in memory as `yyyyyyyy uuuuuuuu YYYYYYYY vvvvvvvv`.
     ///
-    /// `uuuuuuuu` and `vvvvvvvv` are shared by 2 neighboring pixels.
+    /// `uuuuuuuu` and `vvvvvvvv` are shared by 2 horizontally neighboring pixels.
+    ///
+    /// Also known as [`YUYV`](Self::YUYV).
     pub const YUY2: Self = f(b"YUY2");
+
+    /// Identical to [`YUY2`](Self::YUY2).
+    pub const YUYV: Self = f(b"YUYV");
 
     /// Interleaved YUV 4:2:2, stored in memory as `uuuuuuuu yyyyyyyy vvvvvvvv YYYYYYYY`.
     ///
@@ -72,7 +77,7 @@ impl PixelFormat {
     pub fn to_rtformat(self) -> Option<RTFormat> {
         Some(match self {
             Self::NV12 | Self::NV21 => RTFormat::YUV420,
-            Self::YUY2 | Self::UYVY => RTFormat::YUV422,
+            Self::YUY2 | Self::YUYV | Self::UYVY => RTFormat::YUV422,
             Self::RGBA | Self::RGBX | Self::ARGB | Self::BGRA | Self::BGRX => RTFormat::RGB32,
             _ => return None,
         })

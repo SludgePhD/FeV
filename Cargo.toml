@@ -21,3 +21,6 @@ softbuffer = "0.3.0"
 jpeg-decoder = "0.3.0"
 anyhow = "1.0.68"
 expect-test = "1.4.0"
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -328,7 +328,7 @@ impl Display {
         Ok(Entrypoints { vec: entrypoints })
     }
 
-    /// Queries the supported [`ImageFormat`][crate::image::ImageFormat]s.
+    /// Queries the supported [`ImageFormat`]s.
     pub fn query_image_formats(&self) -> Result<ImageFormats> {
         unsafe {
             let max = self.d.libva.vaMaxNumImageFormats(self.d.raw) as usize;

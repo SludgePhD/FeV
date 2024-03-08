@@ -58,10 +58,13 @@ impl Context {
         &self,
         filters: &mut Filters,
     ) -> Result<ProcPipelineCaps> {
-        let mut input_color_standards = vec![ColorStandardType(0); 32];
-        let mut output_color_standards = vec![ColorStandardType(0); 32];
-        let mut input_pixel_formats = vec![PixelFormat::from_u32_le(0); 32];
-        let mut output_pixel_formats = vec![PixelFormat::from_u32_le(0); 32];
+        const BUFLEN: usize = 32;
+        const EMPTY_COLOR_STANDARDS: &[ColorStandardType] = &[ColorStandardType(0); BUFLEN];
+        const EMPTY_PIXEL_FORMATS: &[PixelFormat] = &[PixelFormat::from_u32_le(0); BUFLEN];
+        let mut input_color_standards = EMPTY_COLOR_STANDARDS.to_vec();
+        let mut output_color_standards = EMPTY_COLOR_STANDARDS.to_vec();
+        let mut input_pixel_formats = EMPTY_PIXEL_FORMATS.to_vec();
+        let mut output_pixel_formats = EMPTY_PIXEL_FORMATS.to_vec();
 
         unsafe {
             let mut caps: RawProcPipelineCaps = mem::zeroed();
@@ -87,33 +90,44 @@ impl Context {
             // Intel's and Mesa's implementation doesn't use the user-provided buffers, but changes
             // the pointer to point to static data, despite the `va_vpp.h` docs implying otherwise.
             // Support both by copying to our buffer.
-            let num_in_color_stds = caps.num_input_color_standards as usize;
-            let num_out_color_stds = caps.num_output_color_standards as usize;
             if caps.input_color_standards != input_color_standards.as_mut_ptr() {
-                input_color_standards[..num_in_color_stds].copy_from_slice(slice::from_raw_parts(
-                    caps.input_color_standards,
-                    num_in_color_stds,
-                ));
+                let num = caps.num_input_color_standards as usize;
+                input_color_standards[..num]
+                    .copy_from_slice(slice::from_raw_parts(caps.input_color_standards, num));
             }
             if caps.output_color_standards != output_color_standards.as_mut_ptr() {
-                output_color_standards[..num_out_color_stds].copy_from_slice(
-                    slice::from_raw_parts(caps.output_color_standards, num_out_color_stds),
-                );
+                let num = caps.num_output_color_standards as usize;
+                output_color_standards[..num]
+                    .copy_from_slice(slice::from_raw_parts(caps.output_color_standards, num));
+            }
+            if caps.input_pixel_format != input_pixel_formats.as_mut_ptr() {
+                let num = caps.num_input_pixel_formats as usize;
+                input_pixel_formats[..num]
+                    .copy_from_slice(slice::from_raw_parts(caps.input_pixel_format, num));
+            }
+            if caps.output_pixel_format != output_pixel_formats.as_mut_ptr() {
+                let num = caps.num_output_pixel_formats as usize;
+                output_pixel_formats[..num]
+                    .copy_from_slice(slice::from_raw_parts(caps.output_pixel_format, num));
             }
 
             // Aaaand of course nobody actually supports the pixel format part of the interface.
-            // So when the number is unchanged, assume the data is too, and clear it.
-            if caps.num_input_pixel_formats == input_pixel_formats.len() as _ {
-                input_pixel_formats.clear();
-            }
-            if caps.num_output_pixel_formats == output_pixel_formats.len() as _ {
-                output_pixel_formats.clear();
-            }
+            // So when the data is unchanged, set them to `None`.
+            let input_pixel_formats = if input_pixel_formats == EMPTY_PIXEL_FORMATS {
+                None
+            } else {
+                input_pixel_formats.truncate(caps.num_input_pixel_formats as _);
+                Some(input_pixel_formats)
+            };
+            let output_pixel_formats = if output_pixel_formats == EMPTY_PIXEL_FORMATS {
+                None
+            } else {
+                output_pixel_formats.truncate(caps.num_output_pixel_formats as _);
+                Some(output_pixel_formats)
+            };
 
             input_color_standards.truncate(caps.num_input_color_standards as _);
             output_color_standards.truncate(caps.num_output_color_standards as _);
-            input_pixel_formats.truncate(caps.num_input_pixel_formats as _);
-            output_pixel_formats.truncate(caps.num_output_pixel_formats as _);
 
             Ok(ProcPipelineCaps {
                 raw: caps,
@@ -566,8 +580,8 @@ pub struct ProcPipelineCaps {
     raw: RawProcPipelineCaps,
     input_color_standards: Vec<ColorStandardType>,
     output_color_standards: Vec<ColorStandardType>,
-    input_pixel_formats: Vec<PixelFormat>,
-    output_pixel_formats: Vec<PixelFormat>,
+    input_pixel_formats: Option<Vec<PixelFormat>>,
+    output_pixel_formats: Option<Vec<PixelFormat>>,
 }
 
 impl ProcPipelineCaps {
@@ -601,14 +615,18 @@ impl ProcPipelineCaps {
         &self.output_color_standards
     }
 
+    /// Returns the list of supported [`PixelFormat`]s for the source surface, or [`None`] if
+    /// unknown.
     #[inline]
-    pub fn input_pixel_formats(&self) -> &[PixelFormat] {
-        &self.input_pixel_formats
+    pub fn input_pixel_formats(&self) -> Option<&[PixelFormat]> {
+        self.input_pixel_formats.as_deref()
     }
 
+    /// Returns the list of supported [`PixelFormat`]s for the destination surface, or [`None`] if
+    /// unknown.
     #[inline]
-    pub fn output_pixel_formats(&self) -> &[PixelFormat] {
-        &self.output_pixel_formats
+    pub fn output_pixel_formats(&self) -> Option<&[PixelFormat]> {
+        self.output_pixel_formats.as_deref()
     }
 }
 

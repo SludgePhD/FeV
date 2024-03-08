@@ -5,8 +5,7 @@
 #![allow(bad_style)]
 
 use std::{
-    ffi::c_void,
-    os::raw::{c_char, c_float, c_int, c_uchar, c_uint},
+    os::raw::{c_char, c_float, c_int, c_short, c_uchar, c_uint, c_ulong, c_ushort, c_void},
     sync::OnceLock,
 };
 
@@ -133,7 +132,19 @@ dylib! {
     fn vaDestroyImage(dpy: VADisplay, image: VAImageID) -> VAStatus;
     fn vaSetImagePalette(dpy: VADisplay, image: VAImageID, palette: *mut c_uchar) -> VAStatus;
     fn vaGetImage(dpy: VADisplay, surface: VASurfaceID, x: c_int, y: c_int, width: c_uint, height: c_uint, image: VAImageID) -> VAStatus;
-    fn vaPutImage(dpy: VADisplay, surface: VASurfaceID, image: VAImageID, src_x: c_int, src_y: c_int, src_width: c_uint, src_height: c_uint, dest_x: c_int, dest_y: c_int, dest_width: c_uint, dest_height: c_uint) -> VAStatus;
+    fn vaPutImage(
+        dpy: VADisplay,
+        surface: VASurfaceID,
+        image: VAImageID,
+        src_x: c_int,
+        src_y: c_int,
+        src_width: c_uint,
+        src_height: c_uint,
+        dest_x: c_int,
+        dest_y: c_int,
+        dest_width: c_uint,
+        dest_height: c_uint
+    ) -> VAStatus;
     fn vaDeriveImage(dpy: VADisplay, surface: VASurfaceID, image: *mut VAImage) -> VAStatus;
     fn vaMaxNumSubpictureFormats(dpy: VADisplay) -> c_int;
     fn vaQuerySubpictureFormats(dpy: VADisplay, format_list: *mut ImageFormat, flags: *mut c_uint, num_formats: *mut c_uint) -> VAStatus;
@@ -172,6 +183,22 @@ dylib! {
     pub struct libva_x11;
 
     fn vaGetDisplay(dpy: *mut Display) -> VADisplay;
+    fn vaPutSurface(
+        dpy: VADisplay,
+        surface: VASurfaceID,
+        draw: Drawable,
+        srcx: c_short,
+        srcy: c_short,
+        srcw: c_ushort,
+        srch: c_ushort,
+        destx: c_short,
+        desty: c_short,
+        destw: c_ushort,
+        desth: c_ushort,
+        cliprects: *mut Rectangle,
+        number_cliprects: c_uint,
+        flags: c_uint
+    ) -> VAStatus;
 }
 
 dylib! {
@@ -193,3 +220,5 @@ pub struct wl_buffer;
 
 /// Opaque type representing the Xlib X11 `Display` type.
 pub struct Display;
+
+pub type Drawable = c_ulong;

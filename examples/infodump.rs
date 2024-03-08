@@ -144,8 +144,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             "- Output Color Standards: {:?}",
             caps.output_color_standards()
         );
-        println!("- Input Pixel Formats: {:?}", caps.input_pixel_formats());
-        println!("- Output Pixel Formats: {:?}", caps.output_pixel_formats());
+        print!("- Input Pixel Formats: ");
+        match caps.input_pixel_formats() {
+            Some(fmts) => println!("{fmts:?}"),
+            None => println!("<unknown>"),
+        }
+        print!("- Output Pixel Formats: ");
+        match caps.output_pixel_formats() {
+            Some(fmts) => println!("{fmts:?}"),
+            None => println!("<unknown>"),
+        }
     }
 
     Ok(())

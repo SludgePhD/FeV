@@ -3,10 +3,11 @@ use std::{num::NonZeroU32, rc::Rc, time::Instant};
 use anyhow::bail;
 use fev::{
     display::Display,
+    image::{Image, ImageFormat},
     jpeg::{JpegDecodeSession, JpegInfo},
     surface::ExportSurfaceFlags,
+    PixelFormat,
 };
-use softbuffer::{Context, Surface};
 use winit::{
     dpi::PhysicalSize,
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -49,8 +50,8 @@ fn main() -> anyhow::Result<()> {
         .build(&ev)?;
     let win = Rc::new(win);
 
-    let graphics_context = unsafe { Context::new(&win).unwrap() };
-    let mut surface = unsafe { Surface::new(&graphics_context, &win).unwrap() };
+    let graphics_context = unsafe { softbuffer::Context::new(&win).unwrap() };
+    let mut surface = unsafe { softbuffer::Surface::new(&graphics_context, &win).unwrap() };
     let PhysicalSize { width, height } = win.inner_size();
     surface
         .resize(
@@ -68,8 +69,19 @@ fn main() -> anyhow::Result<()> {
         .export_prime(ExportSurfaceFlags::SEPARATE_LAYERS | ExportSurfaceFlags::READ)?;
     log::debug!("PRIME export: {prime:#?}");
 
+    let mut image = Image::new(
+        &display,
+        ImageFormat::new(PixelFormat::RGBA),
+        jpeg_info.width().into(),
+        jpeg_info.height().into(),
+    )?;
+
+    log::debug!("<decode>");
+    let start = Instant::now();
     let surf = context.decode_and_convert(&jpeg)?;
-    let mapping = surf.map_sync()?;
+    log::debug!("</decode> took {:?}", start.elapsed());
+    surf.copy_to_image(&mut image)?;
+    let mapping = image.map()?;
 
     log::debug!("{} byte output", mapping.len());
 

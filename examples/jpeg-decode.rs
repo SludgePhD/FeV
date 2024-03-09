@@ -111,8 +111,10 @@ fn main() -> anyhow::Result<()> {
     let mut pppbuf = Buffer::new_param(&vpp_context, BufferType::ProcPipelineParameter, pppbuf)?;
 
     let mut picture = vpp_context.begin_picture(&mut vpp_surface)?;
-    picture.render_picture(&mut pppbuf)?;
-    unsafe { picture.end_picture()? }
+    unsafe {
+        picture.render_picture(&mut pppbuf)?;
+        picture.end_picture()?;
+    }
 
     drop(pppbuf);
 

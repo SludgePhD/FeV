@@ -682,7 +682,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore] // FIXME: fails on AMD/Mesa
     fn vpp_copy() {
         run_test(|display| {
             // Surface with test data.
@@ -705,8 +704,8 @@ mod tests {
                 Buffer::new_param(&context, BufferType::ProcPipelineParameter, pppbuf).unwrap();
 
             let mut picture = context.begin_picture(&mut output_surface).unwrap();
-            picture.render_picture(&mut params).unwrap();
             unsafe {
+                picture.render_picture(&mut params).unwrap();
                 picture.end_picture().unwrap();
             }
 
@@ -719,7 +718,6 @@ mod tests {
             .expect("failed to create output image");
 
             output_surface.sync().expect("sync failed");
-            // TODO: the following unwrap fails on AMD/Mesa for seemingly no reason
             output_surface.copy_to_image(&mut output_image).unwrap();
 
             output_surface.sync().unwrap();

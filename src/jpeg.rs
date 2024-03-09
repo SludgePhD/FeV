@@ -594,12 +594,14 @@ impl JpegDecodeSession {
             Buffer::new_data(&self.jpeg_context, BufferType::SliceData, &slice_data)?;
 
         let mut picture = self.jpeg_context.begin_picture(&mut self.jpeg_surface)?;
-        picture.render_picture(&mut buf_dht)?;
-        picture.render_picture(&mut buf_iq)?;
-        picture.render_picture(&mut buf_pp)?;
-        picture.render_picture(&mut buf_slice_param)?;
-        picture.render_picture(&mut buf_slice_data)?;
-        unsafe { picture.end_picture()? }
+        unsafe {
+            picture.render_picture(&mut buf_dht)?;
+            picture.render_picture(&mut buf_iq)?;
+            picture.render_picture(&mut buf_pp)?;
+            picture.render_picture(&mut buf_slice_param)?;
+            picture.render_picture(&mut buf_slice_data)?;
+            picture.end_picture()?;
+        }
 
         Ok(&mut self.jpeg_surface)
     }

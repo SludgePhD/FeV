@@ -40,6 +40,9 @@ impl Context {
     }
 
     /// Begins a libva operation that will render to (or encode from) the given [`Surface`].
+    ///
+    /// Returns an [`InProgressPicture`] that can be used to submit parameter and data buffers to
+    /// libva.
     pub fn begin_picture<'a>(
         &'a mut self,
         target: &'a mut Surface,
@@ -72,6 +75,9 @@ impl Drop for Context {
 }
 
 /// An operation whose submission is still in progress.
+///
+/// Submit parameter and data buffers with [`InProgressPicture::render_picture`] and finish the
+/// operation, kicking off decoding or encoding, by calling [`InProgressPicture::end_picture`].
 pub struct InProgressPicture<'a> {
     d: Arc<DisplayOwner>,
     context: &'a mut Context,
@@ -82,15 +88,28 @@ impl<'a> InProgressPicture<'a> {
     ///
     /// Typically, libva does not document which buffer types are required for any given entry
     /// point, so good luck!
-    pub fn render_picture<T>(&mut self, buffer: &mut Buffer<T>) -> Result<()> {
-        unsafe {
-            check(
-                "vaRenderPicture",
-                self.d
-                    .libva
-                    .vaRenderPicture(self.d.raw, self.context.id, &mut buffer.id(), 1),
-            )
-        }
+    ///
+    /// # Safety
+    ///
+    /// Buffers containing metadata structures must contain a valid value of the particular subtype
+    /// required by the configured [`Profile`][crate::Profile] and
+    /// [`Entrypoint`][crate::Entrypoint].
+    ///
+    /// For example, when using [`Profile::JPEGBaseline`][crate::Profile::JPEGBaseline] and
+    /// [`Entrypoint::VLD`][crate::Entrypoint::VLD], submitting a [`Buffer`] with
+    /// [`BufferType::SliceParameter`][crate::buffer::BufferType::SliceParameter] requires that the
+    /// [`Buffer`] contains a [`jpeg::SliceParameterBuffer`][crate::jpeg::SliceParameterBuffer],
+    /// and submitting only the substructure [`SliceParameterBufferBase`] will cause Undefined
+    /// Behavior.
+    ///
+    /// [`SliceParameterBufferBase`]: crate::SliceParameterBufferBase
+    pub unsafe fn render_picture<T>(&mut self, buffer: &mut Buffer<T>) -> Result<()> {
+        check(
+            "vaRenderPicture",
+            self.d
+                .libva
+                .vaRenderPicture(self.d.raw, self.context.id, &mut buffer.id(), 1),
+        )
     }
 
     /// Finishes submitting buffers, and begins the libva operation (encode, decode, etc.).

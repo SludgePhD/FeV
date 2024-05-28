@@ -1,4 +1,4 @@
-# Ferrovanadium: VA-API bindings for Rust
+# VA-API bindings for Rust
 
 This library provides high-level wrappers around **VA-API** (*libva*), the
 Video Acceleration API used by Linux, Android, and BSD systems.

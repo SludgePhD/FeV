@@ -1,5 +1,7 @@
 //! [`Surface`]s and surface attributes.
 
+#[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
+#[cfg(target_os = "linux")]
 pub mod drm;
 
 use core::fmt;
@@ -62,7 +64,14 @@ bitflags! {
     }
 }
 
-/// A [`Surface`] attribute.
+/// A [`Surface`] attribute can be used to request a specific property or configuration during
+/// [`Surface`] creation.
+///
+/// It can be created [`From`] a [`SurfaceAttribEnum`], or queried from a [`Config`] via
+/// [`Config::query_surface_attributes`].
+///
+/// [`Config`]: crate::config::Config
+/// [`Config::query_surface_attributes`]: crate::config::Config::query_surface_attributes
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SurfaceAttrib {
@@ -318,6 +327,9 @@ bitflags! {
 }
 
 /// A graphics surface or texture.
+///
+/// A [`Surface`] acts as either the input of an encoding operation, or the output of a decoding
+/// operation. It can also be used as either the source or target of a VPP operation.
 #[derive(Debug)]
 pub struct Surface {
     d: Arc<DisplayOwner>,
@@ -325,11 +337,16 @@ pub struct Surface {
 }
 
 impl Surface {
+    /// Creates a [`Surface`] with the given [`RTFormat`].
     pub fn new(display: &Display, width: u32, height: u32, format: RTFormat) -> Result<Self> {
         log::trace!("creating {width}x{height} surface with {format:?}");
         Self::with_attribs(display, width, height, format, &mut [])
     }
 
+    /// Creates a [`Surface`] with the given [`PixelFormat`].
+    ///
+    /// This will try to derive a matching [`RTFormat`] automatically via
+    /// [`PixelFormat::to_rtformat`].
     pub fn with_pixel_format(
         display: &Display,
         width: u32,
@@ -353,6 +370,8 @@ impl Surface {
         )
     }
 
+    /// Creates a [`Surface`] with the given [`RTFormat`] and a list of [`SurfaceAttrib`]utes to
+    /// apply.
     pub fn with_attribs(
         display: &Display,
         width: u32,
@@ -402,6 +421,10 @@ impl Surface {
         Ok(())
     }
 
+    /// Returns the current [`SurfaceStatus`] of this [`Surface`].
+    ///
+    /// The [`SurfaceStatus`] indicates whether and how the [`Surface`] is currently being used by a
+    /// VA-API operation.
     pub fn status(&self) -> Result<SurfaceStatus> {
         let mut status = SurfaceStatus(0);
         unsafe {
@@ -417,9 +440,9 @@ impl Surface {
 
     /// Copies all pixels from `self` to the given [`Image`].
     ///
-    /// This calls `vaGetImage`, which may be expensive on some drivers (eg.
-    /// Intel). If possible, [`SurfaceWithImage`] should be used, so that
-    /// `vaDeriveImage` is used instead if the driver supports it.
+    /// This calls `vaGetImage`, which may be expensive on some drivers (eg. Intel). If possible,
+    /// [`SurfaceWithImage`] should be used, so that `vaDeriveImage` is used instead if the driver
+    /// supports it.
     pub fn copy_to_image(&mut self, image: &mut Image) -> Result<()> {
         self.sync()?;
 
@@ -519,6 +542,11 @@ impl Surface {
     ///
     /// **Note**: The underlying function, `vaGetSurfaceBufferWl`, is not implemented on Mesa/AMD,
     /// so this will always return an error there.
+    ///
+    /// (also note that the `wl_buffer` type in the documentation is deliberately private; cast it
+    /// to the desired type to use it)
+    #[cfg(target_os = "linux")]
+    #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
     pub fn wayland_buffer(&self) -> Result<*mut wl_buffer> {
         unsafe {
             let mut wlbufferptr = MaybeUninit::uninit();
@@ -636,6 +664,7 @@ impl DerefMut for SurfaceWithImage {
     }
 }
 
+/// Enumeration of supported [`SurfaceAttrib`]utes.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum SurfaceAttribEnum {

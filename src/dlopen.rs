@@ -2,7 +2,7 @@
 //!
 //! Types used by the bindings are defined throughout the library.
 
-#![allow(bad_style)]
+#![allow(bad_style, non_camel_case_types)]
 
 use std::{
     os::raw::{c_char, c_float, c_int, c_short, c_uchar, c_uint, c_ulong, c_ushort, c_void},

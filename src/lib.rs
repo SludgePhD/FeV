@@ -2,6 +2,8 @@
 //!
 //! See [`Display`][display::Display] for the main entry point into the library.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[macro_use]
 mod macros;
 mod dlopen;

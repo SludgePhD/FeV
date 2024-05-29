@@ -1,6 +1,6 @@
 use std::{
     ffi::c_void,
-    os::raw::{c_char, c_int, c_uint},
+    os::raw::{c_char, c_uint},
 };
 
 use crate::buffer::BufferType;
@@ -58,7 +58,6 @@ pub type VADisplay = *mut c_void;
 
 pub type VAMessageCallback =
     unsafe extern "C" fn(user_context: *mut c_void, message: *const c_char);
-pub type VAPrivFunc = unsafe extern "C" fn() -> c_int;
 pub type VAGenericFunc = unsafe extern "C" fn();
 
 pub type VAGenericID = c_uint;

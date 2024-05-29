@@ -14,7 +14,7 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
 use crate::{
     check, check_log,
-    dlopen::{libva, libva_drm, libva_wayland, libva_x11},
+    dlopen::{libva, libva_drm, libva_wayland, libva_win32, libva_x11},
     image::{ImageFormat, ImageFormats},
     raw::{VADisplay, VA_PADDING_LOW},
     subpicture::{SubpictureFlags, SubpictureFormats},
@@ -131,6 +131,7 @@ pub enum DisplayApi {
     Xlib,
     Wayland,
     Drm,
+    Win32,
 }
 
 /// Owns a VADisplay and destroys it on drop.
@@ -209,20 +210,20 @@ impl Display {
             let api = match handle {
                 RawDisplayHandle::Xlib(d) => {
                     let display = d.display.map_or(ptr::null_mut(), NonNull::as_ptr);
-                    raw = libva_x11::get()
-                        .map_err(Error::from)?
-                        .vaGetDisplay(display.cast());
+                    raw = libva_x11::get()?.vaGetDisplay(display.cast());
                     DisplayApi::Xlib
                 }
                 RawDisplayHandle::Wayland(d) => {
-                    raw = libva_wayland::get()
-                        .map_err(Error::from)?
-                        .vaGetDisplayWl(d.display.as_ptr().cast());
+                    raw = libva_wayland::get()?.vaGetDisplayWl(d.display.as_ptr().cast());
                     DisplayApi::Wayland
                 }
                 RawDisplayHandle::Drm(d) => {
-                    raw = libva_drm::get().map_err(Error::from)?.vaGetDisplayDRM(d.fd);
+                    raw = libva_drm::get()?.vaGetDisplayDRM(d.fd);
                     DisplayApi::Drm
+                }
+                RawDisplayHandle::Windows(_) => {
+                    raw = libva_win32::get()?.vaGetDisplayWin32(ptr::null());
+                    DisplayApi::Win32
                 }
                 _ => {
                     return Err(Error::from(format!(
@@ -232,7 +233,7 @@ impl Display {
                 }
             };
 
-            let libva = libva::get().map_err(Error::from)?;
+            let libva = libva::get()?;
             let valid = libva.vaDisplayIsValid(raw);
             if valid == 0 {
                 return Err(Error::from(format!(

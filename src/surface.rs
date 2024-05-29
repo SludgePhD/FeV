@@ -18,7 +18,6 @@ use crate::{
     buffer::Mapping,
     check, check_log,
     display::{Display, DisplayOwner},
-    dlopen::{libva_wayland, wl_buffer},
     error::VAError,
     image::{Image, ImageFormat},
     pixelformat::PixelFormat,
@@ -547,14 +546,17 @@ impl Surface {
     /// to the desired type to use it)
     #[cfg(target_os = "linux")]
     #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
-    pub fn wayland_buffer(&self) -> Result<*mut wl_buffer> {
+    pub fn wayland_buffer(&self) -> Result<*mut crate::dlopen::wl_buffer> {
         unsafe {
             let mut wlbufferptr = MaybeUninit::uninit();
             check(
                 "vaGetSurfaceBufferWl",
-                libva_wayland::get()
-                    .map_err(Error::from)?
-                    .vaGetSurfaceBufferWl(self.d.raw, self.id, 0, wlbufferptr.as_mut_ptr()),
+                crate::dlopen::libva_wayland::get()?.vaGetSurfaceBufferWl(
+                    self.d.raw,
+                    self.id,
+                    0,
+                    wlbufferptr.as_mut_ptr(),
+                ),
             )?;
             Ok(wlbufferptr.assume_init())
         }

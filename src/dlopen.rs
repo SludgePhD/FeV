@@ -13,7 +13,7 @@ use crate::{
     buffer::BufferType,
     config::ConfigAttrib,
     display::DisplayAttribute,
-    error::VAStatus,
+    error::{Error, VAStatus},
     image::{ImageFormat, VAImage},
     raw::*,
     subpicture::SubpictureFlags,
@@ -44,14 +44,20 @@ macro_rules! dylib {
 
         #[allow(unused)]
         impl $strukt {
-            fn load() -> Result<Self, libloading::Error> {
+            fn load() -> Result<Self, Error> {
                 unsafe {
-                    let libname = concat!(stringify!($strukt), ".so").replace('_', "-");
-                    let lib = libloading::Library::new(&libname)?;
+                    let libname = if cfg!(target_os = "windows") {
+                        concat!(stringify!($strukt), ".dll").replace("lib", "")
+                    } else {
+                        concat!(stringify!($strukt), ".so").replace('_', "-")
+                    };
+
+                    let lib = libloading::Library::new(&libname).map_err(|e| Error::dlopen(&libname, e))?;
 
                     let this = Self {
                         $(
-                            $func: *lib.get(concat!(stringify!($func), "\0").as_bytes())?,
+                            $func: *lib.get(concat!(stringify!($func), "\0").as_bytes())
+                                .map_err(|e| Error::dlsym(&libname, stringify!($func), e))?,
                         )+
                     };
 
@@ -62,11 +68,11 @@ macro_rules! dylib {
                 }
             }
 
-            pub fn get() -> Result<&'static Self, &'static libloading::Error> {
-                static CELL: OnceLock<Result<$strukt, libloading::Error>> = OnceLock::new();
+            pub fn get() -> Result<&'static Self, Error> {
+                static CELL: OnceLock<Result<$strukt, Error>> = OnceLock::new();
                 match CELL.get_or_init(Self::load) {
                     Ok(this) => Ok(this),
-                    Err(e) => Err(e),
+                    Err(e) => Err(Error::statik(e)),
                 }
             }
 
@@ -90,7 +96,6 @@ dylib! {
     fn vaInitialize(dpy: VADisplay, major_version: *mut c_int, minor_version: *mut c_int) -> VAStatus;
     fn vaTerminate(dpy: VADisplay) -> VAStatus;
     fn vaQueryVendorString(dpy: VADisplay) -> *const c_char;
-    fn vaGetLibFunc(dpy: VADisplay, func: *const c_char) -> VAPrivFunc;
     fn vaMaxNumProfiles(dpy: VADisplay) -> c_int;
     fn vaMaxNumEntrypoints(dpy: VADisplay) -> c_int;
     fn vaMaxNumConfigAttributes(dpy: VADisplay) -> c_int;
@@ -213,6 +218,12 @@ dylib! {
     pub struct libva_drm;
 
     fn vaGetDisplayDRM(fd: c_int) -> VADisplay;
+}
+
+dylib! {
+    pub struct libva_win32;
+
+    fn vaGetDisplayWin32(adapter_luid: *const c_void) -> VADisplay;
 }
 
 pub struct wl_display;

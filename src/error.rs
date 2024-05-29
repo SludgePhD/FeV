@@ -79,7 +79,7 @@ impl PartialEq<VAStatus> for VAError {
 impl VAError {
     pub fn to_str(self) -> Result<&'static str, Error> {
         unsafe {
-            let cstr = &CStr::from_ptr(libva::get().map_err(Error::from)?.vaErrorStr(self.into()));
+            let cstr = &CStr::from_ptr(libva::get()?.vaErrorStr(self.into()));
             Ok(cstr.to_str().map_err(Error::from)?)
         }
     }
@@ -87,11 +87,16 @@ impl VAError {
 
 pub(crate) enum Repr {
     Libva(&'static str, VAError),
-    Libloading(&'static libloading::Error),
+    Libloading {
+        inner: libloading::Error,
+        libname: String,
+        funcname: Option<&'static str>,
+    },
     Utf8Error(Utf8Error),
     TryFromIntError(TryFromIntError),
     HandleError(raw_window_handle::HandleError),
     Other(String),
+    Static(&'static Error),
 }
 
 impl From<raw_window_handle::HandleError> for Repr {
@@ -124,12 +129,6 @@ impl From<Utf8Error> for Repr {
     }
 }
 
-impl From<&'static libloading::Error> for Repr {
-    fn from(v: &'static libloading::Error) -> Self {
-        Self::Libloading(v)
-    }
-}
-
 /// The main error type used by this library.
 pub struct Error {
     repr: Repr,
@@ -154,17 +153,54 @@ impl Error {
             repr: Repr::Libva(location, error),
         }
     }
+
+    pub(crate) fn dlopen(libname: &str, error: libloading::Error) -> Self {
+        Self {
+            repr: Repr::Libloading {
+                inner: error,
+                libname: libname.to_string(),
+                funcname: None,
+            },
+        }
+    }
+
+    pub(crate) fn dlsym(libname: &str, funcname: &'static str, error: libloading::Error) -> Self {
+        Self {
+            repr: Repr::Libloading {
+                inner: error,
+                libname: libname.to_string(),
+                funcname: Some(funcname),
+            },
+        }
+    }
+
+    pub(crate) fn statik(error: &'static Self) -> Self {
+        Self {
+            repr: Repr::Static(error),
+        }
+    }
 }
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.repr {
             Repr::Libva(loc, e) => write!(f, "{loc}: {e:?}"),
-            Repr::Libloading(e) => e.fmt(f),
+            Repr::Libloading {
+                inner,
+                libname,
+                funcname,
+            } => {
+                write!(f, "{libname}")?;
+                if let Some(name) = funcname {
+                    write!(f, "/{name}")?;
+                }
+                write!(f, ": {inner:?}")
+            }
             Repr::Utf8Error(e) => e.fmt(f),
             Repr::TryFromIntError(e) => e.fmt(f),
             Repr::HandleError(e) => e.fmt(f),
             Repr::Other(s) => s.fmt(f),
+            Repr::Static(e) => e.fmt(f),
         }
     }
 }
@@ -176,11 +212,22 @@ impl fmt::Display for Error {
                 Ok(s) => write!(f, "{loc}: {s} ({e:?})"),
                 Err(_) => fmt::Debug::fmt(e, f),
             },
-            Repr::Libloading(e) => e.fmt(f),
+            Repr::Libloading {
+                inner,
+                libname,
+                funcname,
+            } => {
+                write!(f, "{libname}")?;
+                if let Some(name) = funcname {
+                    write!(f, "/{name}")?;
+                }
+                write!(f, ": {inner}")
+            }
             Repr::Utf8Error(e) => e.fmt(f),
             Repr::TryFromIntError(e) => e.fmt(f),
             Repr::HandleError(e) => e.fmt(f),
             Repr::Other(e) => e.fmt(f),
+            Repr::Static(e) => e.fmt(f),
         }
     }
 }

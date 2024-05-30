@@ -1,11 +1,17 @@
 //! DRM PRIME surface export/import.
 //!
 //! This wraps some of the functionality in `va_drmcommon.h`.
+//!
+//! Also see [`Surface::export_prime`].
 
 use core::fmt;
 use std::{mem::MaybeUninit, os::fd::RawFd};
 
-use crate::{check, PixelFormat, Result};
+use crate::{
+    check,
+    dlopen::{libva_wayland, wl_buffer},
+    PixelFormat, Result,
+};
 
 use super::{ExportSurfaceFlags, Surface, SurfaceAttribMemoryType};
 
@@ -40,31 +46,52 @@ impl fmt::Debug for PrimeSurfaceDescriptor {
 }
 
 impl PrimeSurfaceDescriptor {
+    /// Returns the FourCC code of the overall PRIME surface (eg. [`PixelFormat::NV12`]).
     #[inline]
     pub fn fourcc(&self) -> PixelFormat {
         self.fourcc
     }
 
+    /// Returns the width of the exported surface in pixels.
     #[inline]
     pub fn width(&self) -> u32 {
         self.width
     }
 
+    /// Returns the height of the exported surface in pixels.
     #[inline]
     pub fn height(&self) -> u32 {
         self.height
     }
 
+    /// Returns the list of PRIME objects that make up the surface.
+    ///
+    /// There should be at least 1 object in here, but many multiplanar formats like
+    /// [`PixelFormat::NV12`] are represented as two separate objects.
     #[inline]
     pub fn objects(&self) -> &[PrimeObject] {
         &self.objects[..self.num_objects as usize]
     }
 
+    /// Returns the PRIME object at `index`.
+    ///
+    /// `index` is typically taken from [`PrimePlane::object_index`].
+    ///
+    /// # Panics
+    ///
+    /// This will panic if `index` is out of bounds.
     pub fn object(&self, index: u32) -> &PrimeObject {
         assert!(index < self.num_objects && index < 4);
         &self.objects[index as usize]
     }
 
+    /// Returns the list of PRIME layers making up the surface.
+    ///
+    /// If [`ExportSurfaceFlags::COMPOSED_LAYERS`] was used to export the [`Surface`], there will be
+    /// exactly one layer (potentially with multiple planes).
+    ///
+    /// If [`ExportSurfaceFlags::SEPARATE_LAYERS`] was used, each layer will contain a single plane,
+    /// and multi-planar formats will have multiple layers.
     #[inline]
     pub fn layers(&self) -> &[PrimeLayer] {
         &self.layers[..self.num_layers as usize]
@@ -188,6 +215,7 @@ impl PrimePlane {
     }
 }
 
+/// Linux-specific surface methods.
 impl Surface {
     /// Exports a surface as a set of DRM PRIME objects.
     ///
@@ -217,6 +245,38 @@ impl Surface {
                 ),
             )?;
             Ok(descriptor.assume_init())
+        }
+    }
+
+    /// Returns a pointer to the `wl_buffer` containing this [`Surface`]s pixel data.
+    ///
+    /// This function will only succeed if the [`Display`][crate::display::Display] this [`Surface`]
+    /// was created from is using the Wayland backend. To check the VA-API backend type, use
+    /// [`Display::display_api`][crate::display::Display::display_api].
+    ///
+    /// The returned pointer is valid while the [`Surface`] exists.
+    ///
+    /// [`Surface::sync`] should be called before using the `wl_buffer`, to ensure that all enqueued
+    /// operations have finished.
+    ///
+    /// **Note**: The underlying function, `vaGetSurfaceBufferWl`, is not implemented on Mesa/AMD,
+    /// so this will always return an error there.
+    ///
+    /// (also note that the `wl_buffer` type in the documentation is deliberately private; cast it
+    /// to the desired type to use it)
+    pub fn wayland_buffer(&self) -> Result<*mut wl_buffer> {
+        unsafe {
+            let mut wlbufferptr = MaybeUninit::uninit();
+            check(
+                "vaGetSurfaceBufferWl",
+                libva_wayland::get()?.vaGetSurfaceBufferWl(
+                    self.d.raw,
+                    self.id,
+                    0,
+                    wlbufferptr.as_mut_ptr(),
+                ),
+            )?;
+            Ok(wlbufferptr.assume_init())
         }
     }
 }

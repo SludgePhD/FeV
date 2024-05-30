@@ -528,39 +528,6 @@ impl Surface {
             })
         }
     }
-
-    /// Returns a pointer to the `wl_buffer` containing this [`Surface`]s pixel data.
-    ///
-    /// This function will only succeed if the [`Display`] this [`Surface`] was created from is
-    /// using the Wayland backend. To check the VA-API backend type, use [`Display::display_api`].
-    ///
-    /// The returned pointer is valid while the [`Surface`] exists.
-    ///
-    /// [`Surface::sync`] should be called before using the `wl_buffer`, to ensure that all enqueued
-    /// operations have finished.
-    ///
-    /// **Note**: The underlying function, `vaGetSurfaceBufferWl`, is not implemented on Mesa/AMD,
-    /// so this will always return an error there.
-    ///
-    /// (also note that the `wl_buffer` type in the documentation is deliberately private; cast it
-    /// to the desired type to use it)
-    #[cfg(target_os = "linux")]
-    #[cfg_attr(docsrs, doc(cfg(target_os = "linux")))]
-    pub fn wayland_buffer(&self) -> Result<*mut crate::dlopen::wl_buffer> {
-        unsafe {
-            let mut wlbufferptr = MaybeUninit::uninit();
-            check(
-                "vaGetSurfaceBufferWl",
-                crate::dlopen::libva_wayland::get()?.vaGetSurfaceBufferWl(
-                    self.d.raw,
-                    self.id,
-                    0,
-                    wlbufferptr.as_mut_ptr(),
-                ),
-            )?;
-            Ok(wlbufferptr.assume_init())
-        }
-    }
 }
 
 impl Drop for Surface {

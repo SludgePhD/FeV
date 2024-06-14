@@ -246,6 +246,7 @@ impl<'a> Reader<'a> {
 #[derive(Debug)]
 pub struct Segment<'a> {
     /// Offset of the segment's marker in the input buffer.
+    #[allow(dead_code)] // used in tests
     pub pos: usize,
     pub kind: SegmentKind<'a>,
 }
@@ -260,7 +261,11 @@ pub enum SegmentKind<'a> {
     Sos(Sos<'a>),
     Soi,
     Eoi,
-    Other { marker: u8, data: &'a [u8] },
+    #[allow(dead_code)] // used in tests
+    Other {
+        marker: u8,
+        data: &'a [u8],
+    },
 }
 
 #[derive(Copy, Clone, AnyBitPattern)]

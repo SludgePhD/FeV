@@ -541,6 +541,7 @@ impl Filters {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct FilterValueRange {
@@ -560,12 +561,14 @@ pub struct BlendState {
     max_luma: f32,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct FilterParameterBufferBase {
     type_: FilterType,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct FilterParameterBuffer {

@@ -199,6 +199,7 @@ ffi_enum! {
     }
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub struct SurfaceDecodeMBErrors {
     status: i32,

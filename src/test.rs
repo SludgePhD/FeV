@@ -7,7 +7,7 @@ use winit::{event_loop::EventLoop, platform::x11::EventLoopBuilderExtX11};
 use crate::{
     display::Display,
     image::{Image, ImageFormat},
-    surface::{RTFormat, Surface},
+    surface::Surface,
     PixelFormat,
 };
 
@@ -22,19 +22,38 @@ static EVENT_LOOP: OnceLock<anyhow::Result<DisplayHandle>> = OnceLock::new();
 
 pub const TEST_WIDTH: u32 = 16;
 pub const TEST_HEIGHT: u32 = 16;
-pub const TEST_RTFORMAT: RTFormat = RTFormat::RGB32;
 pub const TEST_PIXELFORMAT: PixelFormat = PixelFormat::RGBA;
 
-pub const TEST_DATA: &[u8] = &[
-    0xff, 0x00, 0x00, 0xff, // red
-    0xff, 0x00, 0xff, 0x00, // green
-    0xff, 0xff, 0x00, 0x00, // blue
-];
+pub const TEST_DATA: &[u8] = &{
+    // Start with solid white
+    let mut data = [0xff; TEST_HEIGHT as usize * TEST_WIDTH as usize];
+
+    // red
+    data[0] = 0xff;
+    data[1] = 0x00;
+    data[2] = 0x00;
+    data[3] = 0xff;
+
+    // green
+    data[4] = 0xff;
+    data[5] = 0x00;
+    data[6] = 0xff;
+    data[7] = 0x00;
+
+    // blue
+    data[8] = 0xff;
+    data[9] = 0xff;
+    data[10] = 0x00;
+    data[11] = 0x00;
+
+    data
+};
 
 /// Creates a [`Surface`] and fills its pixels with [`TEST_DATA`].
 pub fn test_surface(display: &Display) -> Surface {
-    let mut surface = Surface::new(&display, TEST_WIDTH, TEST_HEIGHT, TEST_RTFORMAT)
-        .expect("failed to create surface");
+    let mut surface =
+        Surface::with_pixel_format(&display, TEST_WIDTH, TEST_HEIGHT, TEST_PIXELFORMAT)
+            .expect("failed to create surface");
     let mut input_image = Image::new(
         &display,
         ImageFormat::new(TEST_PIXELFORMAT),

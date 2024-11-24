@@ -175,6 +175,7 @@ ffi_enum! {
         ExternalBufferDescriptor = 7,
         UsageHint = 8,
         DRMFormatModifiers = 9,
+        AlignmentSize = 10,
     }
 }
 
@@ -347,6 +348,10 @@ impl Surface {
     ///
     /// This will try to derive a matching [`RTFormat`] automatically via
     /// [`PixelFormat::to_rtformat`].
+    ///
+    /// Note that not all implementations properly validate the [`PixelFormat`] (eg. mesa), so
+    /// creating an unsupported surface may appear to work, but result in a surface with an
+    /// unexpected pixel format.
     pub fn with_pixel_format(
         display: &Display,
         width: u32,

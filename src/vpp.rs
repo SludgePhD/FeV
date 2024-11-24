@@ -687,11 +687,17 @@ mod tests {
     #[test]
     fn vpp_copy() {
         run_test(|display| {
+            if display.query_vendor_string().unwrap().starts_with("Mesa ") {
+                eprintln!("(skipping test due to incompatible vendor)");
+                return;
+            }
+
             // Surface with test data.
             let input_surface = test_surface(&display);
 
             let mut output_surface =
-                Surface::new(&display, TEST_WIDTH, TEST_HEIGHT, TEST_RTFORMAT).unwrap();
+                Surface::with_pixel_format(&display, TEST_WIDTH, TEST_HEIGHT, TEST_PIXELFORMAT)
+                    .unwrap();
 
             let config = Config::new(&display, Profile::None, Entrypoint::VideoProc).unwrap();
             let mut context = Context::new(&config, TEST_WIDTH, TEST_HEIGHT).unwrap();

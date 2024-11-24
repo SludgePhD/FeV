@@ -18,11 +18,7 @@ fn check(filename: &str, expect: ExpectFile) {
 }
 
 #[test]
-fn reftests() {
-    do_reftests().unwrap();
-}
-
-fn do_reftests() -> Result<(), Box<dyn Error>> {
+fn parser_tests() -> Result<(), Box<dyn Error>> {
     for entry in fs::read_dir("src/jpeg/test-images")? {
         let entry = entry?;
         let path = entry.path();

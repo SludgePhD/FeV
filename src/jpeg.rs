@@ -413,7 +413,7 @@ impl JpegInfo {
 /// A VA-API JPEG decoding session.
 ///
 /// This type encapsulates [`Surface`]s and [`Context`]s for decoding baseline JPEG files of a
-/// particular size. It will also convert the JPEG to standard sRGB color space.
+/// particular size.
 ///
 /// [`Surface`]: crate::surface::Surface
 pub struct JpegDecodeSession {
